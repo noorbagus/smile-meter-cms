@@ -1,3 +1,4 @@
+// components/layout/sidebar.tsx
 'use client';
 
 import { ReactNode } from 'react';
@@ -11,7 +12,7 @@ import {
   BarChart2, 
   LogOut
 } from 'lucide-react';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth } from '@/providers/auth-provider';
 
 interface SidebarProps {
   isMobileMenuOpen: boolean;

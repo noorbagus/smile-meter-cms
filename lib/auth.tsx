@@ -1,7 +1,7 @@
 // lib/auth.tsx
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Session, User } from '@supabase/supabase-js';
-import { useRouter } from 'next/navigation';
+import { useRouter } from 'next/router';
 import { supabase } from './supabase';
 
 type UserRole = 'admin' | 'store_manager';

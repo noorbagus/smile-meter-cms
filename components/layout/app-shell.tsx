@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useState, ReactNode } from 'react';
 import { useAuth } from '@/providers/auth-provider';
 import Header from './header';

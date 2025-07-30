@@ -1,3 +1,4 @@
+// components/layout/header.tsx
 'use client';
 
 import { useState } from 'react';
@@ -8,7 +9,7 @@ import {
   Menu, 
   Users
 } from 'lucide-react';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth } from '@/providers/auth-provider';
 
 interface HeaderProps {
   onMobileMenuToggle: () => void;

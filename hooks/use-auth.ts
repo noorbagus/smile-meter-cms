@@ -1,3 +1,4 @@
+// hooks/use-auth.ts
 'use client';
 
 import { useContext, useEffect, createContext, useCallback, useState } from 'react';
@@ -208,31 +209,5 @@ export function useUnitAccess(unitId: string | undefined, redirectTo = '/dashboa
   return {
     ...auth,
     hasAccess: unitId ? auth.canAccessUnit(unitId) : false
-  };
-}
-
-export function useFeatureAccess(feature: 'user_management' | 'analytics' | 'scheduling' | 'unit_management') {
-  const auth = useAuth();
-  
-  const canAccess = useCallback(() => {
-    if (!auth.user) return false;
-    
-    switch (feature) {
-      case 'user_management':
-        return auth.isAdmin;
-      case 'analytics':
-        return true;
-      case 'scheduling':
-        return true;
-      case 'unit_management':
-        return true;
-      default:
-        return false;
-    }
-  }, [auth.user, auth.isAdmin, feature]);
-  
-  return {
-    ...auth,
-    canAccess: canAccess()
   };
 }

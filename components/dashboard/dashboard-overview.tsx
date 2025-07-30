@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useEffect, useState } from 'react';
 import { BarChart2, CheckCircle, Image as ImageIcon, Users } from 'lucide-react';
 import StatCard from '@/components/dashboard/stat-card';

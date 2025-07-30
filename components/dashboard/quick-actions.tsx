@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowUpRight, Image as ImageIcon, Calendar, Users, BarChart2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';

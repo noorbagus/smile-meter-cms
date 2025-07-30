@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useState } from 'react';
 import { useRequireAuth } from '@/hooks/use-auth';
 import Header from '@/components/layout/header';
