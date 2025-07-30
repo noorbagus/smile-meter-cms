@@ -1,8 +1,7 @@
 'use client';
 
-import { useContext, useEffect } from 'react';
+import { useContext, useEffect, createContext, useCallback, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { createContext, useCallback, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
@@ -40,9 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  // Initialize auth state
   useEffect(() => {
-    // Initial session fetch
     const getInitialSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
@@ -57,7 +54,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     getInitialSession();
 
-    // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setSession(session);
@@ -77,7 +73,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Fetch the user's profile from the database
   const fetchUserProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -88,7 +83,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (error) throw error;
       
-      // Create a properly typed profile
       const userProfile: UserProfile = {
         id: data.id,
         email: data.email,
@@ -96,7 +90,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         assigned_units: []
       };
       
-      // If the user is a store manager, fetch their assigned units
       if (data.role === 'store_manager') {
         const { data: unitsData, error: unitsError } = await supabase
           .from('units')
@@ -116,7 +109,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Sign in with email and password
   const signIn = async (email: string, password: string) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -132,20 +124,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Sign out
   const signOut = async () => {
     await supabase.auth.signOut();
     router.push('/login');
   };
 
-  // Check if user can access a specific unit
   const canAccessUnit = useCallback((unitId: string) => {
     if (!profile) return false;
     if (profile.role === 'admin') return true;
     return profile.assigned_units?.includes(unitId) || false;
   }, [profile]);
 
-  // Provide the auth context
   const value = {
     session,
     user,
@@ -158,10 +147,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     canAccessUnit,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
-// Main auth hook
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
@@ -170,7 +162,6 @@ export function useAuth() {
   return context;
 }
 
-// Hook for protected routes
 export function useRequireAuth(redirectTo = '/login') {
   const auth = useAuth();
   const router = useRouter();
@@ -184,7 +175,6 @@ export function useRequireAuth(redirectTo = '/login') {
   return auth;
 }
 
-// Hook for admin-only routes
 export function useRequireAdmin(redirectTo = '/dashboard') {
   const auth = useAuth();
   const router = useRouter();
@@ -202,7 +192,6 @@ export function useRequireAdmin(redirectTo = '/dashboard') {
   return auth;
 }
 
-// Hook for unit access control
 export function useUnitAccess(unitId: string | undefined, redirectTo = '/dashboard') {
   const auth = useAuth();
   const router = useRouter();
@@ -222,7 +211,6 @@ export function useUnitAccess(unitId: string | undefined, redirectTo = '/dashboa
   };
 }
 
-// Hook for feature access
 export function useFeatureAccess(feature: 'user_management' | 'analytics' | 'scheduling' | 'unit_management') {
   const auth = useAuth();
   
@@ -233,11 +221,11 @@ export function useFeatureAccess(feature: 'user_management' | 'analytics' | 'sch
       case 'user_management':
         return auth.isAdmin;
       case 'analytics':
-        return true; // All authenticated users
+        return true;
       case 'scheduling':
-        return true; // All authenticated users
+        return true;
       case 'unit_management':
-        return true; // All authenticated users can view units they have access to
+        return true;
       default:
         return false;
     }
