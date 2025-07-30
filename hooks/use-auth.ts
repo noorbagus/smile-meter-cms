@@ -1,16 +1,178 @@
-// hooks/use-auth.ts
 'use client';
 
 import { useContext, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { useAuth as useAuthProvider } from '@/providers/auth-provider';
+import { createContext, useCallback, useState } from 'react';
+import { Session, User } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 
-// Re-export the basic auth hook
-export const useAuth = useAuthProvider;
+type UserRole = 'admin' | 'store_manager';
 
-// Protected routes hook
+interface UserProfile {
+  id: string;
+  email: string;
+  role: UserRole;
+  assigned_units?: string[];
+  name?: string;
+}
+
+interface AuthContextType {
+  session: Session | null;
+  user: User | null;
+  profile: UserProfile | null;
+  isLoading: boolean;
+  isAdmin: boolean;
+  isStoreManager: boolean;
+  signIn: (email: string, password: string) => Promise<{
+    error: Error | null;
+    success: boolean;
+  }>;
+  signOut: () => Promise<void>;
+  canAccessUnit: (unitId: string) => boolean;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+
+  // Initialize auth state
+  useEffect(() => {
+    // Initial session fetch
+    const getInitialSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        await fetchUserProfile(session.user.id);
+      } else {
+        setIsLoading(false);
+      }
+    };
+    
+    getInitialSession();
+
+    // Set up auth state change listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          await fetchUserProfile(session.user.id);
+        } else {
+          setProfile(null);
+          setIsLoading(false);
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Fetch the user's profile from the database
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, email, role')
+        .eq('id', userId)
+        .single();
+      
+      if (error) throw error;
+      
+      // Create a properly typed profile
+      const userProfile: UserProfile = {
+        id: data.id,
+        email: data.email,
+        role: data.role as UserRole,
+        assigned_units: []
+      };
+      
+      // If the user is a store manager, fetch their assigned units
+      if (data.role === 'store_manager') {
+        const { data: unitsData, error: unitsError } = await supabase
+          .from('units')
+          .select('id')
+          .eq('assigned_manager_id', userId);
+        
+        if (!unitsError && unitsData) {
+          userProfile.assigned_units = unitsData.map(unit => unit.id);
+        }
+      }
+      
+      setProfile(userProfile);
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Sign in with email and password
+  const signIn = async (email: string, password: string) => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+      
+      return { error: null, success: true };
+    } catch (error: any) {
+      return { error, success: false };
+    }
+  };
+
+  // Sign out
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  // Check if user can access a specific unit
+  const canAccessUnit = useCallback((unitId: string) => {
+    if (!profile) return false;
+    if (profile.role === 'admin') return true;
+    return profile.assigned_units?.includes(unitId) || false;
+  }, [profile]);
+
+  // Provide the auth context
+  const value = {
+    session,
+    user,
+    profile,
+    isLoading,
+    isAdmin: profile?.role === 'admin' || false,
+    isStoreManager: profile?.role === 'store_manager' || false,
+    signIn,
+    signOut,
+    canAccessUnit,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+// Main auth hook
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
+
+// Hook for protected routes
 export function useRequireAuth(redirectTo = '/login') {
-  const auth = useAuthProvider();
+  const auth = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -22,9 +184,9 @@ export function useRequireAuth(redirectTo = '/login') {
   return auth;
 }
 
-// Admin-only routes hook
+// Hook for admin-only routes
 export function useRequireAdmin(redirectTo = '/dashboard') {
-  const auth = useAuthProvider();
+  const auth = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -40,9 +202,9 @@ export function useRequireAdmin(redirectTo = '/dashboard') {
   return auth;
 }
 
-// Unit access control hook
+// Hook for unit access control
 export function useUnitAccess(unitId: string | undefined, redirectTo = '/dashboard') {
-  const auth = useAuthProvider();
+  const auth = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -60,13 +222,11 @@ export function useUnitAccess(unitId: string | undefined, redirectTo = '/dashboa
   };
 }
 
-// Check if user can access a specific feature
+// Hook for feature access
 export function useFeatureAccess(feature: 'user_management' | 'analytics' | 'scheduling' | 'unit_management') {
-  const auth = useAuthProvider();
+  const auth = useAuth();
   
-  // Currently simple implementation based on role
-  // Could be expanded with more granular permissions
-  const canAccess = () => {
+  const canAccess = useCallback(() => {
     if (!auth.user) return false;
     
     switch (feature) {
@@ -81,7 +241,7 @@ export function useFeatureAccess(feature: 'user_management' | 'analytics' | 'sch
       default:
         return false;
     }
-  };
+  }, [auth.user, auth.isAdmin, feature]);
   
   return {
     ...auth,

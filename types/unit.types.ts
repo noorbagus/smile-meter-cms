@@ -27,3 +27,45 @@ export interface UnitStats {
   usageToday: number;
   lastActivity?: string;
 }
+
+export interface UnitActivity {
+  id: string;
+  unitId: string;
+  action: string;
+  userId: string;
+  userName: string;
+  timestamp: string;
+  category?: RewardCategory;
+}
+
+export interface UnitListItem extends Unit {
+  manager_name?: string;
+  status: 'active' | 'inactive';
+  last_updated?: string;
+  usage_today?: number;
+}
+
+export interface CreateUnitPayload {
+  name: string;
+  assigned_manager_id?: string | null;
+}
+
+export interface UpdateUnitPayload {
+  name?: string;
+  assigned_manager_id?: string | null;
+}
+
+export interface UploadImagePayload {
+  unitId: string;
+  category: RewardCategory;
+  file: File;
+  userId: string;
+}
+
+export interface ScheduleImagePayload {
+  unitId: string;
+  category: RewardCategory;
+  imageUrl: string;
+  scheduledDate: string;
+  scheduledBy: string;
+}
