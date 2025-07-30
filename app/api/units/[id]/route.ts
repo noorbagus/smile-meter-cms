@@ -172,7 +172,6 @@ export async function PUT(
         updateData.assigned_manager_id = body.assigned_manager_id || null;
       }
     }
-    }
 
     // Update unit
     const { data, error } = await supabase
