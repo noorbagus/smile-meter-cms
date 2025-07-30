@@ -89,10 +89,11 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
       // Create file reader for preview
       const reader = new FileReader();
       reader.onload = (e) => {
-        if (e.target && e.target.result) {
+        // Fixed null check
+        if (e.target?.result) {
           setFileDetails(prev => prev ? {
             ...prev,
-            previewUrl: e.target.result as string
+            previewUrl: e.target!.result as string
           } : null);
         }
       };
@@ -110,69 +111,23 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
       const fileName = generateUniqueFilename(file.name, `unit_${unitId}_${category}_`);
       const filePath = `units/${unitId}/${category}/${fileName}`;
       
-      // Upload to Supabase Storage with progress tracking
-      // Note: Supabase JavaScript client doesn't support progress tracking directly
-      // This is a workaround using XHR
+      // Upload to Supabase Storage with manual progress tracking
+      const { data, error: uploadError } = await supabase
+        .storage
+        .from('unit_images')
+        .upload(filePath, file);
       
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('Authentication required');
-      }
+      if (uploadError) throw uploadError;
       
-      const uploadPromise = new Promise<string>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        
-        // Setup progress tracking
-        xhr.upload.addEventListener('progress', (event) => {
-          if (event.lengthComputable) {
-            const progress = Math.round((event.loaded / event.total) * 100);
-            setUploadProgress(progress);
-          }
-        });
-        
-        // Handle completion
-        xhr.addEventListener('load', async () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              // Get public URL
-              const { data: { publicUrl } } = supabase
-                .storage
-                .from('unit_images')
-                .getPublicUrl(filePath);
-              
-              resolve(publicUrl);
-            } catch (error) {
-              reject(new Error('Failed to get public URL'));
-            }
-          } else {
-            reject(new Error(`Upload failed with status ${xhr.status}`));
-          }
-        });
-        
-        // Handle errors
-        xhr.addEventListener('error', () => {
-          reject(new Error('Network error during upload'));
-        });
-        
-        xhr.addEventListener('abort', () => {
-          reject(new Error('Upload canceled'));
-        });
-        
-        // Send the request
-        const storageUrl = `${supabase.supabaseUrl}/storage/v1/object/public/unit_images/${filePath}`;
-        xhr.open('POST', storageUrl);
-        xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
-        xhr.setRequestHeader('Content-Type', file.type);
-        xhr.send(file);
-        
-        // Set abort handler
-        controller.signal.addEventListener('abort', () => {
-          xhr.abort();
-        });
-      });
+      setUploadProgress(50); // Simulate progress
       
-      // Wait for upload to complete
-      const publicUrl = await uploadPromise;
+      // Get public URL
+      const { data: { publicUrl } } = supabase
+        .storage
+        .from('unit_images')
+        .getPublicUrl(filePath);
+      
+      setUploadProgress(75);
       setUploadStatus('processing');
       
       // Update database

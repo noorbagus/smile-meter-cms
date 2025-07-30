@@ -12,6 +12,7 @@ interface UploadProgressProps {
   onCancel?: () => void;
 }
 
+// Default export added
 export default function UploadProgress({
   progress,
   status,

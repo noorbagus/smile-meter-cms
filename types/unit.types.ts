@@ -1,4 +1,4 @@
-// types/unit.types.ts
+// Path: types/unit.types.ts
 import { Database } from "./supabase";
 import { UserMinimal } from "./user.types";
 
@@ -19,6 +19,8 @@ export interface UnitWithImages extends Unit {
     [key in RewardCategory]?: UnitImage;
   };
   manager?: UserMinimal;
+  status: 'active' | 'inactive';
+  lastUpdated?: string;
 }
 
 export interface UnitStats {

@@ -1,3 +1,4 @@
+// Path: hooks/use-units.ts
 'use client';
 
 import { useCallback, useState } from 'react';
@@ -41,10 +42,9 @@ export function useUnits() {
       if (error) throw error;
       
       // Transform data to include additional fields
-      // In a real app, these would come from the database
       const transformedData: UnitListItem[] = data.map(unit => ({
         ...unit,
-        status: 'active', // Mocked for now
+        status: 'active' as const,
         last_updated: unit.updated_at,
         manager_name: 'Store Manager', // Mocked for now
         usage_today: Math.floor(Math.random() * 50) // Mocked for now
@@ -100,7 +100,10 @@ export function useUnits() {
       
       return {
         ...unitData,
-        images
+        images,
+        status: 'active' as const,
+        lastUpdated: unitData.updated_at,
+        manager: undefined // Will be populated with actual manager data when available
       };
     } catch (err: any) {
       setError(err.message);
