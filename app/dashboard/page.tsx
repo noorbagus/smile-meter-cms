@@ -2,40 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/providers/auth-provider';
 import { BarChart2, CheckCircle, Image as ImageIcon, Users } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
 import { supabase } from '@/lib/supabase';
-
-interface StatCardProps {
-  title: string;
-  value: string | number;
-  icon: React.ReactNode;
-  trend?: {
-    value: string;
-    label: string;
-  };
-}
-
-function StatCard({ title, value, icon, trend }: StatCardProps) {
-  return (
-    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex justify-between items-start">
-        <div>
-          <p className="text-sm font-medium text-gray-500">{title}</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
-          {trend && (
-            <p className="mt-1 text-sm text-gray-500">
-              <span className="font-medium text-green-600">{trend.value}</span> {trend.label}
-            </p>
-          )}
-        </div>
-        <div className="h-10 w-10 rounded-full bg-gray-50 flex items-center justify-center">
-          {icon}
-        </div>
-      </div>
-    </div>
-  );
-}
+import StatCard from '@/components/dashboard/stat-card';
+import UnitsTable from '@/components/dashboard/units-table';
+import QuickActions from '@/components/dashboard/quick-actions';
 
 interface Unit {
   id: string;
@@ -61,7 +33,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchUnits = async () => {
       try {
-        // Temporarily using mock data since your 'units' table doesn't have these columns yet
+        // Mock data for simple implementation
         const mockUnits: Unit[] = [
           {
             id: 'unit_hypermart_a',
@@ -90,19 +62,9 @@ export default function DashboardPage() {
         ];
         
         setUnits(mockUnits);
-        
-        // When your database has the proper columns, use this:
-        /*
-        const { data, error } = await supabase
-          .from('units')
-          .select('id, name, manager_name, status, last_updated, usage_today');
-          
-        if (error) throw error;
-        setUnits(data as Unit[]);
-        */
+        setIsLoadingUnits(false);
       } catch (error) {
         console.error('Error fetching units:', error);
-      } finally {
         setIsLoadingUnits(false);
       }
     };
@@ -161,88 +123,13 @@ export default function DashboardPage() {
       </div>
 
       {/* Units Overview */}
-      <div className="bg-white shadow-sm rounded-xl border border-gray-200 overflow-hidden mb-8">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h2 className="font-semibold text-lg">Units Overview</h2>
-          <button 
-            onClick={() => router.push('/units')}
-            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-          >
-            View All
-          </button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <th className="px-6 py-3">Unit Name</th>
-                <th className="px-6 py-3">Manager</th>
-                <th className="px-6 py-3">Status</th>
-                <th className="px-6 py-3">Usage Today</th>
-                <th className="px-6 py-3">Last Updated</th>
-                <th className="px-6 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {units.map((unit) => (
-                <tr key={unit.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="font-medium">{unit.name}</div>
-                    <div className="text-xs text-gray-500">{unit.id}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">{unit.manager_name || 'Unassigned'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span 
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        unit.status === 'active' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {unit.status === 'active' ? (
-                        <>
-                          <CheckCircle size={12} className="mr-1" />
-                          Active
-                        </>
-                      ) : (
-                        <>
-                          <span className="h-2 w-2 bg-red-400 rounded-full mr-1"></span>
-                          Inactive
-                        </>
-                      )}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="mr-2 font-medium">{unit.usage_today || 0}</div>
-                      {(unit.usage_today || 0) > 0 && (
-                        <div className="text-xs text-gray-500">sessions</div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-gray-500">
-                    {unit.last_updated || 'Never'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <button 
-                      onClick={() => router.push(`/units/${unit.id}`)}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                    >
-                      Manage
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {units.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                    No units found. Create your first unit to get started.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+      <div className="mb-8">
+        <UnitsTable units={units} isLoading={isLoadingUnits} />
+      </div>
+
+      {/* Quick Actions */}
+      <div className="mb-8">
+        <QuickActions />
       </div>
     </div>
   );

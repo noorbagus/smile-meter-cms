@@ -1,4 +1,4 @@
-// Path: types/unit.types.ts
+// types/unit.types.ts
 import { Database } from "./supabase";
 import { UserMinimal } from "./user.types";
 
