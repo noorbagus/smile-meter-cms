@@ -1,9 +1,8 @@
-'use client';
-
-import React, { createContext, useContext, useEffect, useState } from 'react';
+// lib/auth.tsx
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { supabase } from './supabase';
 
 type UserRole = 'admin' | 'store_manager';
 
@@ -12,7 +11,6 @@ interface UserProfile {
   email: string;
   role: UserRole;
   assigned_units?: string[];
-  name?: string;
 }
 
 interface AuthContextType {
@@ -32,7 +30,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -40,7 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    // Initial session fetch
+    // Get initial session
     const getInitialSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
@@ -55,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     getInitialSession();
 
-    // Set up auth state change listener
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setSession(session);
@@ -85,7 +83,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (error) throw error;
       
-      // Create a properly typed profile (without name since it doesn't exist)
       const userProfile: UserProfile = {
         id: data.id,
         email: data.email,
@@ -93,7 +90,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         assigned_units: []
       };
       
-      // For store managers, fetch their assigned units
       if (data.role === 'store_manager') {
         const { data: unitsData, error: unitsError } = await supabase
           .from('units')
@@ -154,15 +150,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export const useAuth = () => {
+export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-};
+}
 
-// Hooks for protected routes
 export function useRequireAuth() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
