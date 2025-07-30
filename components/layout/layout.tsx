@@ -1,8 +1,8 @@
-// components/layout/Layout.tsx
+// components/layout/layout.tsx
 import { ReactNode, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { useAuth } from '@/lib/auth';
+import { useAuth } from '@/providers/auth-provider';
 import { 
   LayoutDashboard, 
   Image as ImageIcon, 
