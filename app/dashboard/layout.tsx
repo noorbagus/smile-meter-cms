@@ -28,7 +28,7 @@ export default function DashboardLayout({
   }
 
   // AuthProvider handles auth validation and redirects
-  // If we reach here, user is authenticated
+  // If we reach here, user is authenticated bisa
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar 
@@ -46,3 +46,4 @@ export default function DashboardLayout({
     </div>
   );
 }
+
