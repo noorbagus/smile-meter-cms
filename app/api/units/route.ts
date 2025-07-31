@@ -1,41 +1,49 @@
 // app/api/units/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { getServiceSupabase } from '@/lib/supabase';
+
+async function validateSession() {
+  const supabase = getServiceSupabase();
+  const { data: { session }, error } = await supabase.auth.getSession();
+  
+  if (error || !session) {
+    return { error: 'Unauthorized', status: 401 };
+  }
+  
+  const { data: userData, error: userError } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', session.user.id)
+    .single();
+    
+  if (userError) {
+    return { error: userError.message, status: 500 };
+  }
+  
+  return { session, userId: session.user.id, role: userData.role };
+}
 
 // GET /api/units - Get all units with optional filtering
 export async function GET(request: NextRequest) {
   try {
-    // Get Supabase session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError || !session) {
+    // Validate session
+    const sessionResult = await validateSession();
+    if ('error' in sessionResult) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
+        { error: sessionResult.error },
+        { status: sessionResult.status }
       );
     }
-
+    
+    const { userId, role } = sessionResult;
+    
     // Get query parameters
     const url = new URL(request.url);
     const status = url.searchParams.get('status');
     const managerId = url.searchParams.get('managerId');
 
-    // Get user role from session
-    const userId = session.user.id;
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', userId)
-      .single();
-
-    if (userError) {
-      return NextResponse.json(
-        { error: userError.message },
-        { status: 500 }
-      );
-    }
-
     // Build query based on user role
+    const supabase = getServiceSupabase();
     let query = supabase.from('units').select(`
       id,
       name,
@@ -48,7 +56,7 @@ export async function GET(request: NextRequest) {
     `);
 
     // For non-admin users, only show units they manage
-    if (userData.role !== 'admin') {
+    if (role !== 'admin') {
       query = query.eq('assigned_manager_id', userId);
     } 
     // For admin with managerId filter
@@ -56,7 +64,6 @@ export async function GET(request: NextRequest) {
       query = query.eq('assigned_manager_id', managerId);
     }
 
-    // Execute query
     const { data, error } = await query;
 
     if (error) {
@@ -70,7 +77,7 @@ export async function GET(request: NextRequest) {
     const transformedData = data.map(unit => ({
       id: unit.id,
       name: unit.name,
-      status: 'active', // Default status since it's not in the database yet
+      status: 'active',
       assigned_manager_id: unit.assigned_manager_id,
       created_at: unit.created_at,
       updated_at: unit.updated_at,
@@ -89,39 +96,25 @@ export async function GET(request: NextRequest) {
 // POST /api/units - Create a new unit
 export async function POST(request: NextRequest) {
   try {
-    // Get Supabase session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    // Validate session
+    const sessionResult = await validateSession();
+    if ('error' in sessionResult) {
+      return NextResponse.json(
+        { error: sessionResult.error },
+        { status: sessionResult.status }
+      );
+    }
     
-    if (sessionError || !session) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    const { role } = sessionResult;
 
-    // Check if user is admin
-    const userId = session.user.id;
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', userId)
-      .single();
-
-    if (userError) {
-      return NextResponse.json(
-        { error: userError.message },
-        { status: 500 }
-      );
-    }
-
-    if (userData.role !== 'admin') {
+    // Only admins can create units
+    if (role !== 'admin') {
       return NextResponse.json(
         { error: 'Only administrators can create units' },
         { status: 403 }
       );
     }
 
-    // Parse request body
     const body = await request.json();
 
     // Validate required fields
@@ -133,6 +126,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create unit
+    const supabase = getServiceSupabase();
     const { data, error } = await supabase
       .from('units')
       .insert({

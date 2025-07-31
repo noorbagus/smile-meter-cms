@@ -2,6 +2,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 
+async function validateAdminSession() {
+  const supabase = getServiceSupabase();
+  const { data: { session }, error } = await supabase.auth.getSession();
+  
+  if (error || !session) {
+    return { error: 'Unauthorized', status: 401 };
+  }
+  
+  // Check if user is admin
+  const { data: userData, error: userError } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', session.user.id)
+    .single();
+    
+  if (userError) {
+    return { error: userError.message, status: 500 };
+  }
+  
+  if (userData.role !== 'admin') {
+    return { error: 'Admin privileges required', status: 403 };
+  }
+  
+  return { session, userId: session.user.id };
+}
+
 // GET /api/users/[id] - Get a single user
 export async function GET(
   request: NextRequest,
@@ -9,8 +35,17 @@ export async function GET(
 ) {
   try {
     const userId = params.id;
-    const supabase = getServiceSupabase();
     
+    // Validate admin session
+    const sessionResult = await validateAdminSession();
+    if ('error' in sessionResult) {
+      return NextResponse.json(
+        { error: sessionResult.error },
+        { status: sessionResult.status }
+      );
+    }
+    
+    const supabase = getServiceSupabase();
     const { data, error } = await supabase
       .from('users')
       .select('id, email, role')
@@ -40,11 +75,18 @@ export async function PUT(
 ) {
   try {
     const userId = params.id;
+    
+    // Validate admin session
+    const sessionResult = await validateAdminSession();
+    if ('error' in sessionResult) {
+      return NextResponse.json(
+        { error: sessionResult.error },
+        { status: sessionResult.status }
+      );
+    }
+    
     const supabase = getServiceSupabase();
     const body = await request.json();
-    
-    // Start a transaction (simplified version)
-    let updateSuccessful = true;
     
     // Update password if provided
     if (body.password) {
@@ -54,7 +96,6 @@ export async function PUT(
       );
       
       if (authError) {
-        updateSuccessful = false;
         return NextResponse.json(
           { error: authError.message },
           { status: 400 }
@@ -62,7 +103,7 @@ export async function PUT(
       }
     }
     
-    // Update email if provided (requires auth update too)
+    // Update email if provided
     if (body.email) {
       const { error: authError } = await supabase.auth.admin.updateUserById(
         userId, 
@@ -70,7 +111,6 @@ export async function PUT(
       );
       
       if (authError) {
-        updateSuccessful = false;
         return NextResponse.json(
           { error: authError.message },
           { status: 400 }
@@ -79,29 +119,28 @@ export async function PUT(
     }
     
     // Update user profile
-    if (updateSuccessful) {
-      const updateData: any = {};
-      
-      if (body.email) updateData.email = body.email;
-      if (body.role) updateData.role = body.role;
-      updateData.updated_at = new Date().toISOString();
-      
-      const { data, error } = await supabase
-        .from('users')
-        .update(updateData)
-        .eq('id', userId)
-        .select()
-        .single();
-      
-      if (error) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 500 }
-        );
-      }
-      
-      return NextResponse.json(data);
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+    
+    if (body.email) updateData.email = body.email;
+    if (body.role) updateData.role = body.role;
+    
+    const { data, error } = await supabase
+      .from('users')
+      .update(updateData)
+      .eq('id', userId)
+      .select()
+      .single();
+    
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
     }
+    
+    return NextResponse.json(data);
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
@@ -117,6 +156,16 @@ export async function DELETE(
 ) {
   try {
     const userId = params.id;
+    
+    // Validate admin session
+    const sessionResult = await validateAdminSession();
+    if ('error' in sessionResult) {
+      return NextResponse.json(
+        { error: sessionResult.error },
+        { status: sessionResult.status }
+      );
+    }
+    
     const supabase = getServiceSupabase();
     
     // Delete the auth user first

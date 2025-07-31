@@ -5,9 +5,61 @@ import { revalidatePath } from 'next/cache';
 import { getServiceSupabase } from '@/lib/supabase';
 import { CreateUnitPayload, UpdateUnitPayload } from '@/types/unit.types';
 
+async function validateSession() {
+  const supabase = getServiceSupabase();
+  const { data: { session }, error } = await supabase.auth.getSession();
+  
+  if (error || !session) {
+    return { success: false, error: 'Authentication required' };
+  }
+  
+  const { data: userData, error: userError } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', session.user.id)
+    .single();
+    
+  if (userError) {
+    return { success: false, error: userError.message };
+  }
+  
+  return { success: true, session, userId: session.user.id, role: userData.role };
+}
+
+async function validateAdminSession() {
+  const sessionResult = await validateSession();
+  if (!sessionResult.success) {
+    return sessionResult;
+  }
+  
+  if (sessionResult.role !== 'admin') {
+    return { success: false, error: 'Admin privileges required' };
+  }
+  
+  return sessionResult;
+}
+
+async function checkUnitAccess(unitId: string, userId: string, role: string) {
+  if (role === 'admin') return true;
+  
+  const supabase = getServiceSupabase();
+  const { data } = await supabase
+    .from('units')
+    .select('assigned_manager_id')
+    .eq('id', unitId)
+    .single();
+    
+  return data?.assigned_manager_id === userId;
+}
+
 // Create a new unit
 export async function createUnit(data: CreateUnitPayload): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
+    const sessionResult = await validateAdminSession();
+    if (!sessionResult.success) {
+      return sessionResult;
+    }
+
     const supabase = getServiceSupabase();
     
     const { data: unit, error } = await supabase
@@ -25,7 +77,6 @@ export async function createUnit(data: CreateUnitPayload): Promise<{ success: bo
       return { success: false, error: error.message };
     }
     
-    // Revalidate cached data
     revalidatePath('/units');
     revalidatePath('/dashboard');
     
@@ -38,14 +89,38 @@ export async function createUnit(data: CreateUnitPayload): Promise<{ success: bo
 // Update an existing unit
 export async function updateUnit(unitId: string, data: UpdateUnitPayload): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
+    const sessionResult = await validateSession();
+    if (!sessionResult.success) {
+      return sessionResult;
+    }
+
+    const { userId, role } = sessionResult;
+    
+    if (!userId || !role) {
+      return { success: false, error: 'Invalid session data' };
+    }
+    
+    // Check unit access
+    const hasAccess = await checkUnitAccess(unitId, userId, role);
+    if (!hasAccess) {
+      return { success: false, error: 'You do not have permission to update this unit' };
+    }
+
     const supabase = getServiceSupabase();
+    
+    const updateData = {
+      ...data,
+      updated_at: new Date().toISOString()
+    };
+    
+    // Only admins can change assigned manager
+    if (role !== 'admin' && data.assigned_manager_id !== undefined) {
+      delete updateData.assigned_manager_id;
+    }
     
     const { data: unit, error } = await supabase
       .from('units')
-      .update({
-        ...data,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', unitId)
       .select()
       .single();
@@ -54,7 +129,6 @@ export async function updateUnit(unitId: string, data: UpdateUnitPayload): Promi
       return { success: false, error: error.message };
     }
     
-    // Revalidate cached data
     revalidatePath('/units');
     revalidatePath(`/units/${unitId}`);
     revalidatePath('/dashboard');
@@ -68,6 +142,11 @@ export async function updateUnit(unitId: string, data: UpdateUnitPayload): Promi
 // Delete a unit
 export async function deleteUnit(unitId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const sessionResult = await validateAdminSession();
+    if (!sessionResult.success) {
+      return sessionResult;
+    }
+
     const supabase = getServiceSupabase();
     
     // Delete associated images first
@@ -90,7 +169,6 @@ export async function deleteUnit(unitId: string): Promise<{ success: boolean; er
       return { success: false, error: error.message };
     }
     
-    // Revalidate cached data
     revalidatePath('/units');
     revalidatePath('/dashboard');
     
@@ -105,8 +183,29 @@ export async function uploadUnitImage(formData: FormData): Promise<{ success: bo
   try {
     const unitId = formData.get('unitId') as string;
     
-    // We're using fetch here since we need to handle multipart/form-data
-    const response = await fetch(`/api/units/${unitId}/images`, {
+    if (!unitId) {
+      return { success: false, error: 'Unit ID is required' };
+    }
+
+    const sessionResult = await validateSession();
+    if (!sessionResult.success) {
+      return sessionResult;
+    }
+
+    const { userId, role } = sessionResult;
+    
+    if (!userId || !role) {
+      return { success: false, error: 'Invalid session data' };
+    }
+    
+    // Check unit access
+    const hasAccess = await checkUnitAccess(unitId, userId, role);
+    if (!hasAccess) {
+      return { success: false, error: 'You do not have permission to upload images for this unit' };
+    }
+    
+    // Forward to API endpoint for multipart handling
+    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/units/${unitId}/images`, {
       method: 'POST',
       body: formData
     });
@@ -117,7 +216,6 @@ export async function uploadUnitImage(formData: FormData): Promise<{ success: bo
       return { success: false, error: result.error || 'Upload failed' };
     }
     
-    // Revalidate cached data
     revalidatePath(`/units/${unitId}`);
     
     return { success: true, data: result.data };

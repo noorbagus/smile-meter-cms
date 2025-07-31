@@ -1,4 +1,3 @@
-// actions/users.actions.ts
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -17,8 +16,38 @@ interface UpdateUserData {
   role?: string;
 }
 
+async function validateAdminSession() {
+  const supabase = getServiceSupabase();
+  const { data: { session }, error } = await supabase.auth.getSession();
+  
+  if (error || !session) {
+    return { success: false, error: 'Authentication required' };
+  }
+  
+  const { data: userData, error: userError } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', session.user.id)
+    .single();
+    
+  if (userError) {
+    return { success: false, error: userError.message };
+  }
+  
+  if (userData.role !== 'admin') {
+    return { success: false, error: 'Admin privileges required' };
+  }
+  
+  return { success: true, session, userId: session.user.id };
+}
+
 export async function createUser(userData: CreateUserData): Promise<{ success: boolean; data?: UserMinimal; error?: string }> {
   try {
+    const sessionResult = await validateAdminSession();
+    if (!sessionResult.success) {
+      return sessionResult;
+    }
+
     const supabase = getServiceSupabase();
     
     // Create the auth user
@@ -64,6 +93,11 @@ export async function createUser(userData: CreateUserData): Promise<{ success: b
 
 export async function updateUser(userId: string, userData: UpdateUserData): Promise<{ success: boolean; data?: UserMinimal; error?: string }> {
   try {
+    const sessionResult = await validateAdminSession();
+    if (!sessionResult.success) {
+      return sessionResult;
+    }
+
     const supabase = getServiceSupabase();
     
     // Update password if provided
@@ -78,7 +112,7 @@ export async function updateUser(userId: string, userData: UpdateUserData): Prom
       }
     }
     
-    // Update email if provided (requires auth update too)
+    // Update email if provided
     if (userData.email) {
       const { error: authError } = await supabase.auth.admin.updateUserById(
         userId, 
@@ -118,6 +152,11 @@ export async function updateUser(userId: string, userData: UpdateUserData): Prom
 
 export async function deleteUser(userId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const sessionResult = await validateAdminSession();
+    if (!sessionResult.success) {
+      return sessionResult;
+    }
+
     const supabase = getServiceSupabase();
     
     // Delete the auth user first
@@ -146,6 +185,11 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
 
 export async function getUserById(userId: string): Promise<{ success: boolean; data?: UserMinimal; error?: string }> {
   try {
+    const sessionResult = await validateAdminSession();
+    if (!sessionResult.success) {
+      return sessionResult;
+    }
+
     const supabase = getServiceSupabase();
     
     const { data, error } = await supabase
@@ -166,6 +210,11 @@ export async function getUserById(userId: string): Promise<{ success: boolean; d
 
 export async function getUsers(role?: string): Promise<{ success: boolean; data?: UserMinimal[]; error?: string }> {
   try {
+    const sessionResult = await validateAdminSession();
+    if (!sessionResult.success) {
+      return sessionResult;
+    }
+
     const supabase = getServiceSupabase();
     
     let query = supabase

@@ -1,6 +1,45 @@
 // app/api/units/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { getServiceSupabase } from '@/lib/supabase';
+
+async function validateSession() {
+  const supabase = getServiceSupabase();
+  const { data: { session }, error } = await supabase.auth.getSession();
+  
+  if (error || !session) {
+    return { error: 'Unauthorized', status: 401 };
+  }
+  
+  return { session, userId: session.user.id };
+}
+
+async function getUserRole(userId: string) {
+  const supabase = getServiceSupabase();
+  const { data, error } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', userId)
+    .single();
+    
+  if (error) {
+    return { error: error.message, status: 500 };
+  }
+  
+  return { role: data.role };
+}
+
+async function checkUnitAccess(unitId: string, userId: string, userRole: string) {
+  if (userRole === 'admin') return true;
+  
+  const supabase = getServiceSupabase();
+  const { data } = await supabase
+    .from('units')
+    .select('assigned_manager_id')
+    .eq('id', unitId)
+    .single();
+    
+  return data?.assigned_manager_id === userId;
+}
 
 // GET /api/units/[id] - Get a single unit by ID
 export async function GET(
@@ -10,32 +49,39 @@ export async function GET(
   try {
     const unitId = params.id;
     
-    // Get Supabase session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError || !session) {
+    // Validate session
+    const sessionResult = await validateSession();
+    if ('error' in sessionResult) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
+        { error: sessionResult.error },
+        { status: sessionResult.status }
       );
     }
-
-    // Get user role and check access permission
-    const userId = session.user.id;
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', userId)
-      .single();
-
-    if (userError) {
+    
+    const { userId } = sessionResult;
+    
+    // Get user role
+    const roleResult = await getUserRole(userId);
+    if ('error' in roleResult) {
       return NextResponse.json(
-        { error: userError.message },
-        { status: 500 }
+        { error: roleResult.error },
+        { status: roleResult.status }
+      );
+    }
+    
+    const { role } = roleResult;
+    
+    // Check unit access
+    const hasAccess = await checkUnitAccess(unitId, userId, role);
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: 'You do not have permission to access this unit' },
+        { status: 403 }
       );
     }
 
     // Get unit with images and manager info
+    const supabase = getServiceSupabase();
     const { data: unit, error } = await supabase
       .from('units')
       .select(`
@@ -63,18 +109,7 @@ export async function GET(
       );
     }
 
-    // Check if user has access to this unit
-    if (
-      userData.role !== 'admin' && 
-      unit.assigned_manager_id !== userId
-    ) {
-      return NextResponse.json(
-        { error: 'You do not have permission to access this unit' },
-        { status: 403 }
-      );
-    }
-
-    // Transform image data to a more usable format
+    // Transform image data
     const images: Record<string, any> = {};
     if (unit.unit_images) {
       unit.unit_images.forEach(image => {
@@ -84,13 +119,13 @@ export async function GET(
       });
     }
 
-    // Format response data
+    // Format response
     const formattedUnit = {
       ...unit,
       images,
       manager: unit.users,
-      status: 'active', // Default status since it's not in the database yet
-      users: undefined // Remove the nested users object
+      status: 'active',
+      users: undefined
     };
 
     return NextResponse.json(formattedUnit);
@@ -110,50 +145,31 @@ export async function PUT(
   try {
     const unitId = params.id;
     
-    // Get Supabase session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    // Validate session
+    const sessionResult = await validateSession();
+    if ('error' in sessionResult) {
+      return NextResponse.json(
+        { error: sessionResult.error },
+        { status: sessionResult.status }
+      );
+    }
     
-    if (sessionError || !session) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
+    const { userId } = sessionResult;
+    
     // Get user role
-    const userId = session.user.id;
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', userId)
-      .single();
-
-    if (userError) {
+    const roleResult = await getUserRole(userId);
+    if ('error' in roleResult) {
       return NextResponse.json(
-        { error: userError.message },
-        { status: 500 }
+        { error: roleResult.error },
+        { status: roleResult.status }
       );
     }
-
-    // Check if unit exists and if user has access
-    const { data: unit, error: unitError } = await supabase
-      .from('units')
-      .select('assigned_manager_id')
-      .eq('id', unitId)
-      .single();
-
-    if (unitError) {
-      return NextResponse.json(
-        { error: unitError.message },
-        { status: unitError.code === 'PGRST116' ? 404 : 500 }
-      );
-    }
-
-    // Only admin can update unit details, or assigned manager can update certain fields
-    if (
-      userData.role !== 'admin' &&
-      unit.assigned_manager_id !== userId
-    ) {
+    
+    const { role } = roleResult;
+    
+    // Check unit access
+    const hasAccess = await checkUnitAccess(unitId, userId, role);
+    if (!hasAccess) {
       return NextResponse.json(
         { error: 'You do not have permission to update this unit' },
         { status: 403 }
@@ -165,8 +181,8 @@ export async function PUT(
       updated_at: new Date().toISOString() 
     };
 
-    // Only admins can change the assigned manager and name
-    if (userData.role === 'admin') {
+    // Only admins can change assigned manager and name
+    if (role === 'admin') {
       if (body.name !== undefined) updateData.name = body.name;
       if (body.assigned_manager_id !== undefined) {
         updateData.assigned_manager_id = body.assigned_manager_id || null;
@@ -174,6 +190,7 @@ export async function PUT(
     }
 
     // Update unit
+    const supabase = getServiceSupabase();
     const { data, error } = await supabase
       .from('units')
       .update(updateData)
@@ -205,32 +222,30 @@ export async function DELETE(
   try {
     const unitId = params.id;
     
-    // Get Supabase session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError || !session) {
+    // Validate session
+    const sessionResult = await validateSession();
+    if ('error' in sessionResult) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
+        { error: sessionResult.error },
+        { status: sessionResult.status }
       );
     }
+    
+    const { userId } = sessionResult;
+    
+    // Get user role
+    const roleResult = await getUserRole(userId);
+    if ('error' in roleResult) {
+      return NextResponse.json(
+        { error: roleResult.error },
+        { status: roleResult.status }
+      );
+    }
+    
+    const { role } = roleResult;
 
     // Only admins can delete units
-    const userId = session.user.id;
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', userId)
-      .single();
-
-    if (userError) {
-      return NextResponse.json(
-        { error: userError.message },
-        { status: 500 }
-      );
-    }
-
-    if (userData.role !== 'admin') {
+    if (role !== 'admin') {
       return NextResponse.json(
         { error: 'Only administrators can delete units' },
         { status: 403 }
@@ -238,6 +253,7 @@ export async function DELETE(
     }
 
     // Delete associated images first
+    const supabase = getServiceSupabase();
     const { error: imagesError } = await supabase
       .from('unit_images')
       .delete()
@@ -250,7 +266,7 @@ export async function DELETE(
       );
     }
 
-    // Then delete the unit
+    // Delete the unit
     const { error } = await supabase
       .from('units')
       .delete()

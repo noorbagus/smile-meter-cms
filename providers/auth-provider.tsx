@@ -38,12 +38,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [hasInitialized, setHasInitialized] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const router = useRouter();
 
   const fetchUserProfile = useCallback(async (userId: string) => {
     try {
-      console.log('Fetching user profile for:', userId);
       const { data, error } = await supabase
         .from('users')
         .select('id, email, role')
@@ -73,7 +72,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
       
-      console.log('User profile fetched successfully:', userProfile);
       setProfile(userProfile);
       return userProfile;
     } catch (error) {
@@ -88,41 +86,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initializeAuth = async () => {
       try {
-        console.log('Initializing auth state...');
-        
         // Get initial session
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
           console.error('Error getting session:', error);
-          if (mounted) {
-            setIsLoading(false);
-            setHasInitialized(true);
-          }
-          return;
         }
-
-        console.log('Initial session:', session ? 'Found' : 'Not found');
 
         if (mounted) {
           setSession(session);
           setUser(session?.user ?? null);
           
           if (session?.user) {
-            const profile = await fetchUserProfile(session.user.id);
-            if (mounted && profile) {
-              setProfile(profile);
-            }
+            await fetchUserProfile(session.user.id);
           }
           
+          setIsInitialized(true);
           setIsLoading(false);
-          setHasInitialized(true);
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
         if (mounted) {
+          setIsInitialized(true);
           setIsLoading(false);
-          setHasInitialized(true);
         }
       }
     };
@@ -132,23 +118,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event, session ? 'Session exists' : 'No session');
-        
         if (!mounted) return;
 
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          const profile = await fetchUserProfile(session.user.id);
-          if (mounted) {
-            setProfile(profile);
-          }
+          await fetchUserProfile(session.user.id);
         } else {
           setProfile(null);
         }
         
-        if (hasInitialized) {
+        // Only set loading to false after initialization
+        if (isInitialized) {
           setIsLoading(false);
         }
       }
@@ -158,11 +140,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [fetchUserProfile, hasInitialized]);
+  }, [fetchUserProfile, isInitialized]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     try {
-      console.log('Attempting sign in for:', email);
       setIsLoading(true);
       
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -171,16 +152,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
-        console.error('Sign in error:', error);
         setIsLoading(false);
         return { error, success: false };
       }
       
-      console.log('Sign in successful');
-      // Don't set isLoading to false here - let the auth state change handle it
+      // Let auth state change handle loading state
       return { error: null, success: true };
     } catch (error: any) {
-      console.error('Sign in exception:', error);
       setIsLoading(false);
       return { error, success: false };
     }
@@ -188,7 +166,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     try {
-      console.log('Signing out...');
       await supabase.auth.signOut();
       setProfile(null);
       router.push('/login');
@@ -214,6 +191,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     canAccessUnit,
   };
+
+  // Prevent hydration mismatch by showing loading until initialized
+  if (!isInitialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-12 h-12 border-4 border-gray-300 rounded-full border-t-indigo-600 animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider value={value}>
