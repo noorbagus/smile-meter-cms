@@ -1,3 +1,4 @@
+// providers/auth-provider.tsx - Add more debugging
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -40,21 +41,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const fetchUserProfile = useCallback(async (userId: string) => {
-    console.log(`[AUTH] Fetching user profile for ID: ${userId}`);
+    console.log('[AUTH] Starting fetchUserProfile for userId:', userId);
     try {
-      console.log('[AUTH] Querying users table...');
-      const { data, error } = await supabase
+      // Add timeout to prevent hanging
+      console.log('[AUTH] Querying users table with timeout...');
+      const queryPromise = supabase
         .from('users')
         .select('id, email, role')
         .eq('id', userId)
         .single();
       
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Query timeout after 10 seconds')), 10000)
+      );
+      
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+      
+      console.log('[AUTH] Query completed. Data:', data, 'Error:', error);
+      
       if (error) {
         console.error('[AUTH] Error fetching user profile:', error);
         throw error;
       }
-      
-      console.log('[AUTH] User profile data retrieved:', data);
       
       const userProfile: UserProfile = {
         id: data.id,
@@ -63,8 +71,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         assigned_units: []
       };
       
+      console.log('[AUTH] User profile created:', userProfile);
+
       if (data.role === 'store_manager') {
-        console.log('[AUTH] Store manager role detected, fetching assigned units');
+        console.log('[AUTH] Fetching assigned units for store manager...');
         const { data: unitsData, error: unitsError } = await supabase
           .from('units')
           .select('id')
@@ -74,14 +84,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           userProfile.assigned_units = unitsData.map(unit => unit.id);
           console.log('[AUTH] Assigned units:', userProfile.assigned_units);
         } else if (unitsError) {
-          console.error('[AUTH] Error fetching assigned units:', unitsError);
+          console.warn('[AUTH] Error fetching units (non-critical):', unitsError);
         }
       }
       
-      console.log('[AUTH] Setting profile state:', userProfile);
+      console.log('[AUTH] Setting profile state...');
       setProfile(userProfile);
-    } catch (error) {
+      console.log('[AUTH] Profile set successfully');
+    } catch (error: any) {
       console.error('[AUTH] Error in fetchUserProfile:', error);
+      if (error.name === 'AbortError') {
+        console.error('[AUTH] Query timed out after 10 seconds');
+      }
+      // Set profile to null on error to prevent infinite loading
+      setProfile(null);
     } finally {
       console.log('[AUTH] Setting isLoading to false');
       setIsLoading(false);
@@ -92,21 +108,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('[AUTH] Initial auth setup');
     const getInitialSession = async () => {
       console.log('[AUTH] Getting initial session');
-      const { data: { session }, error } = await supabase.auth.getSession();
-      
-      if (error) {
-        console.error('[AUTH] Error getting session:', error);
-      }
-      
-      console.log('[AUTH] Initial session:', session ? 'exists' : 'null');
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        console.log('[AUTH] User found in session, fetching profile');
-        await fetchUserProfile(session.user.id);
-      } else {
-        console.log('[AUTH] No user in session, setting isLoading to false');
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        console.log('[AUTH] Initial session result:', { session: !!session, error });
+        
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          console.log('[AUTH] User found in initial session, fetching profile');
+          await fetchUserProfile(session.user.id);
+        } else {
+          console.log('[AUTH] No user in initial session');
+          setIsLoading(false);
+        }
+      } catch (error) {
+        console.error('[AUTH] Error getting initial session:', error);
         setIsLoading(false);
       }
     };
@@ -115,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('[AUTH] Auth state changed:', event, session ? 'session exists' : 'no session');
+        console.log('[AUTH] Auth state changed:', event, 'session exists:', !!session);
         setSession(session);
         setUser(session?.user ?? null);
         
@@ -123,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('[AUTH] User in new session, fetching profile');
           await fetchUserProfile(session.user.id);
         } else {
-          console.log('[AUTH] No user in new session, clearing profile and setting isLoading to false');
+          console.log('[AUTH] No user in new session');
           setProfile(null);
           setIsLoading(false);
         }
@@ -131,58 +148,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
 
     return () => {
-      console.log('[AUTH] Cleaning up auth subscription');
       subscription.unsubscribe();
     };
   }, [fetchUserProfile]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    console.log('[AUTH] Sign in attempt:', email);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) {
-        console.error('[AUTH] Sign in error:', error);
-        throw error;
-      }
+      if (error) throw error;
       
-      console.log('[AUTH] Sign in successful, session created');
       return { error: null, success: true };
     } catch (error: any) {
-      console.error('[AUTH] Sign in exception:', error);
       return { error, success: false };
     }
   }, []);
 
   const signOut = useCallback(async () => {
-    console.log('[AUTH] Sign out requested');
-    try {
-      await supabase.auth.signOut();
-      console.log('[AUTH] Sign out successful, redirecting to login');
-      router.push('/login');
-    } catch (error) {
-      console.error('[AUTH] Sign out error:', error);
-    }
+    await supabase.auth.signOut();
+    router.push('/login');
   }, [router]);
 
   const canAccessUnit = useCallback((unitId: string) => {
-    if (!profile) {
-      console.log('[AUTH] No profile, cannot access unit:', unitId);
-      return false;
-    }
-    
-    if (profile.role === 'admin') {
-      console.log('[AUTH] Admin role, access granted to unit:', unitId);
-      return true;
-    }
-    
-    const hasAccess = profile.assigned_units?.includes(unitId) || false;
-    console.log(`[AUTH] Store manager access check for unit ${unitId}:`, hasAccess);
-    return hasAccess;
+    if (!profile) return false;
+    if (profile.role === 'admin') return true;
+    return profile.assigned_units?.includes(unitId) || false;
   }, [profile]);
+
+  // Add current state logging
+  useEffect(() => {
+    console.log('[AUTH] Current auth state:', {
+      hasUser: !!user,
+      hasProfile: !!profile,
+      isLoading,
+      isAdmin: profile?.role === 'admin'
+    });
+  }, [user, profile, isLoading]);
 
   const value = {
     session,
@@ -195,13 +199,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     canAccessUnit,
   };
-
-  console.log('[AUTH] Current auth state:', { 
-    hasUser: !!user, 
-    hasProfile: !!profile, 
-    isLoading, 
-    isAdmin: profile?.role === 'admin' || false 
-  });
 
   return (
     <AuthContext.Provider value={value}>
