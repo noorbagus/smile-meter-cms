@@ -10,50 +10,80 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const { signIn, user, isLoading: authLoading } = useAuth();
+  const { signIn, user, profile, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirectTo') || '/dashboard';
 
-  // Redirect authenticated users immediately
+  // Debug logging
   useEffect(() => {
-    if (!authLoading && user) {
-      router.replace(redirectTo);
+    console.log('Login page state:', {
+      authLoading,
+      hasUser: !!user,
+      hasProfile: !!profile,
+      redirectTo
+    });
+  }, [authLoading, user, profile, redirectTo]);
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (!authLoading && user && profile) {
+      console.log('User already authenticated, redirecting to:', redirectTo);
+      router.push(redirectTo);
     }
-  }, [authLoading, user, router, redirectTo]);
+  }, [authLoading, user, profile, router, redirectTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
 
+    console.log('Attempting login with:', email);
+
     try {
       const { error, success } = await signIn(email, password);
       
       if (error) {
+        console.error('Login error:', error);
         setError(error.message);
-      } else if (success) {
-        router.replace(redirectTo);
+        setIsLoading(false);
+        return;
+      }
+      
+      if (success) {
+        console.log('Login successful, will redirect after auth state updates');
+        // Don't redirect manually here - let the useEffect handle it
+        // after the auth state is properly updated
       }
     } catch (err: any) {
+      console.error('Login exception:', err);
       setError(err.message || 'An error occurred during sign in');
-    } finally {
       setIsLoading(false);
     }
   };
 
-  // Show loading while checking auth
+  // Show loading if auth is still being determined
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="w-12 h-12 border-4 border-gray-300 rounded-full border-t-indigo-600 animate-spin"></div>
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-gray-300 rounded-full border-t-indigo-600 animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
       </div>
     );
   }
 
-  // Don't render if user is authenticated (will redirect)
-  if (user) {
-    return null;
+  // If user is already authenticated, show loading while redirecting
+  if (user && profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-gray-300 rounded-full border-t-indigo-600 animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Redirecting...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -69,13 +99,24 @@ export default function LoginPage() {
           <p className="mt-2 text-center text-sm text-gray-600">
             Please sign in with your account
           </p>
+          
+          {/* Debug info in development */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-xs">
+              <p><strong>Debug Info:</strong></p>
+              <p>Auth Loading: {authLoading ? 'Yes' : 'No'}</p>
+              <p>Has User: {user ? 'Yes' : 'No'}</p>
+              <p>Has Profile: {profile ? 'Yes' : 'No'}</p>
+              <p>Redirect To: {redirectTo}</p>
+            </div>
+          )}
         </div>
         
         {error && (
           <div className="rounded-md bg-red-50 p-4">
             <div className="flex">
               <div className="flex-shrink-0">
-                <AlertCircle className="h-5 w-5 text-red-400" />
+                <AlertCircle className="h-5 w-5 text-red-400" aria-hidden="true" />
               </div>
               <div className="ml-3">
                 <h3 className="text-sm font-medium text-red-800">{error}</h3>
@@ -87,8 +128,11 @@ export default function LoginPage() {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
+              <label htmlFor="email-address" className="sr-only">
+                Email address
+              </label>
               <input
-                id="email"
+                id="email-address"
                 name="email"
                 type="email"
                 autoComplete="email"
@@ -97,10 +141,12 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
                 placeholder="Email address"
-                disabled={isLoading}
               />
             </div>
             <div>
+              <label htmlFor="password" className="sr-only">
+                Password
+              </label>
               <input
                 id="password"
                 name="password"
@@ -111,7 +157,6 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
                 placeholder="Password"
-                disabled={isLoading}
               />
             </div>
           </div>
@@ -120,7 +165,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400 disabled:cursor-not-allowed"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400"
             >
               {isLoading ? 'Signing in...' : 'Sign in'}
             </button>

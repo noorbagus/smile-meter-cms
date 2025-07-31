@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { BarChart2, CheckCircle, Image as ImageIcon, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -46,91 +45,106 @@ interface Unit {
   usage_today?: number;
 }
 
+// Loading component
+function DashboardLoading() {
+  return (
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="animate-pulse">
+        <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-gray-100 p-6 rounded-xl h-32"></div>
+          ))}
+        </div>
+        <div className="bg-gray-100 rounded-xl h-64"></div>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
-  const { user, isLoading } = useAuth();
-  const router = useRouter();
+  const { user, profile, isLoading } = useAuth();
   const [units, setUnits] = useState<Unit[]>([]);
   const [isLoadingUnits, setIsLoadingUnits] = useState(true);
   
   useEffect(() => {
-    if (!isLoading && !user) {
-      router.push('/login');
-    }
-  }, [isLoading, user, router]);
-  
-  useEffect(() => {
     const fetchUnits = async () => {
+      if (!user || !profile) return;
+      
       try {
-        // Temporarily using mock data since your 'units' table doesn't have these columns yet
-        const mockUnits: Unit[] = [
-          {
-            id: 'unit_hypermart_a',
-            name: 'Hypermart A',
-            manager_name: 'John Doe',
-            status: 'active',
-            last_updated: '2 hours ago',
-            usage_today: 37
-          },
-          {
-            id: 'unit_hypermart_b',
-            name: 'Hypermart B',
-            manager_name: 'Jane Smith',
-            status: 'active',
-            last_updated: '1 day ago',
-            usage_today: 29
-          },
-          {
-            id: 'unit_hypermart_c',
-            name: 'Hypermart C',
-            manager_name: 'Emily Chen',
-            status: 'active',
-            last_updated: '5 hours ago',
-            usage_today: 45
-          }
-        ];
+        console.log('Fetching units for user:', user.id, 'role:', profile.role);
         
-        setUnits(mockUnits);
-        
-        // When your database has the proper columns, use this:
-        /*
-        const { data, error } = await supabase
+        // Build query based on user role
+        let query = supabase
           .from('units')
-          .select('id, name, manager_name, status, last_updated, usage_today');
-          
-        if (error) throw error;
-        setUnits(data as Unit[]);
-        */
+          .select(`
+            id,
+            name,
+            assigned_manager_id,
+            created_at,
+            updated_at
+          `);
+
+        // For non-admin users, only show units they manage
+        if (profile.role !== 'admin') {
+          query = query.eq('assigned_manager_id', user.id);
+        }
+
+        const { data, error } = await query;
+        
+        if (error) {
+          console.error('Error fetching units:', error);
+          return;
+        }
+        
+        console.log('Units fetched:', data);
+        
+        // Transform data to include mock status and usage
+        const transformedUnits: Unit[] = data.map(unit => ({
+          id: unit.id,
+          name: unit.name,
+          manager_name: 'Store Manager', // Will be replaced with actual data
+          status: 'active' as const,
+          last_updated: new Date(unit.updated_at).toLocaleDateString(),
+          usage_today: Math.floor(Math.random() * 50) // Mock data
+        }));
+        
+        setUnits(transformedUnits);
       } catch (error) {
-        console.error('Error fetching units:', error);
+        console.error('Error in fetchUnits:', error);
       } finally {
         setIsLoadingUnits(false);
       }
     };
     
-    if (user) {
+    if (user && profile) {
       fetchUnits();
+    } else if (!isLoading) {
+      setIsLoadingUnits(false);
     }
-  }, [user]);
+  }, [user, profile, isLoading]);
   
-  if (isLoading || isLoadingUnits) {
-    return (
-      <div className="p-4 sm:p-6 lg:p-8">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="bg-gray-100 p-6 rounded-xl h-32"></div>
-            ))}
-          </div>
-          <div className="bg-gray-100 rounded-xl h-64"></div>
-        </div>
-      </div>
-    );
+  // Show loading while auth is being determined
+  if (isLoading) {
+    return <DashboardLoading />;
+  }
+  
+  // Show loading while units are being fetched
+  if (isLoadingUnits) {
+    return <DashboardLoading />;
+  }
+  
+  // If no user or profile, the AuthProvider will handle redirect
+  if (!user || !profile) {
+    return <div>Redirecting...</div>;
   }
   
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Dashboard</h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
+        <p className="text-gray-600 mt-1">Welcome back, {profile.email}</p>
+      </div>
       
       {/* Stats Section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -148,7 +162,7 @@ export default function DashboardPage() {
         />
         <StatCard 
           title="Total Users" 
-          value={8} 
+          value={profile.role === 'admin' ? 8 : 1} 
           trend={{ value: "+2", label: "new this week" }}
           icon={<Users className="h-5 w-5 text-indigo-600" />}
         />
@@ -161,88 +175,70 @@ export default function DashboardPage() {
       </div>
 
       {/* Units Overview */}
-      <div className="bg-white shadow-sm rounded-xl border border-gray-200 overflow-hidden mb-8">
+      <div className="bg-white shadow-sm rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h2 className="font-semibold text-lg">Units Overview</h2>
-          <button 
-            onClick={() => router.push('/units')}
-            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-          >
-            View All
-          </button>
+          <h2 className="font-semibold text-lg">Your Units</h2>
+          <span className="text-sm text-gray-500">
+            {units.length} {units.length === 1 ? 'unit' : 'units'}
+          </span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <th className="px-6 py-3">Unit Name</th>
-                <th className="px-6 py-3">Manager</th>
-                <th className="px-6 py-3">Status</th>
-                <th className="px-6 py-3">Usage Today</th>
-                <th className="px-6 py-3">Last Updated</th>
-                <th className="px-6 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {units.map((unit) => (
-                <tr key={unit.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="font-medium">{unit.name}</div>
-                    <div className="text-xs text-gray-500">{unit.id}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">{unit.manager_name || 'Unassigned'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span 
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        unit.status === 'active' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {unit.status === 'active' ? (
-                        <>
-                          <CheckCircle size={12} className="mr-1" />
-                          Active
-                        </>
-                      ) : (
-                        <>
-                          <span className="h-2 w-2 bg-red-400 rounded-full mr-1"></span>
-                          Inactive
-                        </>
-                      )}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="mr-2 font-medium">{unit.usage_today || 0}</div>
-                      {(unit.usage_today || 0) > 0 && (
-                        <div className="text-xs text-gray-500">sessions</div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-gray-500">
-                    {unit.last_updated || 'Never'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <button 
-                      onClick={() => router.push(`/units/${unit.id}`)}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                    >
-                      Manage
-                    </button>
-                  </td>
+        
+        {units.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <ImageIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No units assigned</h3>
+            <p>Contact your administrator to get assigned to units.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3">Unit Name</th>
+                  <th className="px-6 py-3">Status</th>
+                  <th className="px-6 py-3">Usage Today</th>
+                  <th className="px-6 py-3">Last Updated</th>
+                  <th className="px-6 py-3 text-right">Actions</th>
                 </tr>
-              ))}
-              {units.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                    No units found. Create your first unit to get started.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {units.map((unit) => (
+                  <tr key={unit.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="font-medium">{unit.name}</div>
+                      <div className="text-xs text-gray-500">{unit.id}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <CheckCircle size={12} className="mr-1" />
+                        Active
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="mr-2 font-medium">{unit.usage_today || 0}</div>
+                        {(unit.usage_today || 0) > 0 && (
+                          <div className="text-xs text-gray-500">sessions</div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-500">
+                      {unit.last_updated || 'Never'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <button 
+                        onClick={() => window.location.href = `/units/${unit.id}`}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      >
+                        Manage
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

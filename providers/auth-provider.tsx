@@ -1,6 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
@@ -36,18 +37,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [hasInitialized, setHasInitialized] = useState(false);
-  
-  // Use ref to prevent useEffect dependency issues
-  const profileFetchedRef = useRef(false);
+  const router = useRouter();
+  const pathname = usePathname();
 
   const fetchUserProfile = useCallback(async (userId: string) => {
-    // Prevent duplicate fetches
-    if (profileFetchedRef.current) return;
-    profileFetchedRef.current = true;
-    
     try {
-      console.log('[AUTH] Fetching profile for user:', userId);
+      console.log('Fetching user profile for:', userId);
       
       const { data, error } = await supabase
         .from('users')
@@ -56,9 +51,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
       
       if (error) {
-        console.error('[AUTH] Profile fetch error:', error);
+        console.error('Error fetching user profile:', error);
         throw error;
       }
+      
+      console.log('User profile fetched:', data);
       
       const userProfile: UserProfile = {
         id: data.id,
@@ -67,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         assigned_units: []
       };
       
-      // Only fetch assigned units for store managers
+      // If store manager, get assigned units
       if (data.role === 'store_manager') {
         const { data: unitsData, error: unitsError } = await supabase
           .from('units')
@@ -79,105 +76,155 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
       
-      console.log('[AUTH] Profile fetched successfully:', userProfile);
       setProfile(userProfile);
+      return userProfile;
     } catch (error) {
-      console.error('[AUTH] Error fetching user profile:', error);
-      // Don't throw - just continue without profile
+      console.error('Error fetching user profile:', error);
+      setProfile(null);
+      return null;
     }
   }, []);
 
+  // Initialize auth state
   useEffect(() => {
-    let mounted = true;
+    console.log('Initializing auth state...');
     
-    const initializeAuth = async () => {
+    const getInitialSession = async () => {
       try {
-        console.log('[AUTH] Initializing auth...');
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
-        
-        if (!mounted) return;
-        
-        console.log('[AUTH] Initial session:', !!initialSession);
-        
-        setSession(initialSession);
-        setUser(initialSession?.user ?? null);
-        
-        if (initialSession?.user) {
-          await fetchUserProfile(initialSession.user.id);
-        }
-        
-        setHasInitialized(true);
-        setIsLoading(false);
-        
-      } catch (error) {
-        console.error('[AUTH] Auth initialization error:', error);
-        if (mounted) {
+        if (error) {
+          console.error('Error getting session:', error);
           setIsLoading(false);
-          setHasInitialized(true);
+          return;
         }
+        
+        console.log('Initial session:', session ? 'Found' : 'Not found');
+        
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          await fetchUserProfile(session.user.id);
+        }
+      } catch (error) {
+        console.error('Error in getInitialSession:', error);
+      } finally {
+        setIsLoading(false);
       }
     };
-
-    initializeAuth();
     
-    // Set up auth state listener
+    getInitialSession();
+
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
-        if (!mounted) return;
+      async (event, session) => {
+        console.log('Auth state changed:', event, session ? 'Session exists' : 'No session');
         
-        console.log('[AUTH] Auth state changed:', event, !!newSession);
+        setSession(session);
+        setUser(session?.user ?? null);
         
-        // Reset profile fetch ref on auth changes
-        profileFetchedRef.current = false;
-        
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
-        
-        if (newSession?.user) {
-          await fetchUserProfile(newSession.user.id);
+        if (session?.user) {
+          await fetchUserProfile(session.user.id);
         } else {
           setProfile(null);
         }
         
-        if (!hasInitialized) {
-          setHasInitialized(true);
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
     );
 
     return () => {
-      mounted = false;
       subscription.unsubscribe();
     };
-  }, []); // Empty dependency array - only run once
+  }, [fetchUserProfile]);
+
+  // Handle redirects based on auth state
+  useEffect(() => {
+    if (isLoading) return;
+
+    const isLoginPage = pathname === '/login';
+    const isPublicPage = pathname === '/' || isLoginPage;
+
+    console.log('Auth redirect check:', {
+      isLoading,
+      hasUser: !!user,
+      hasProfile: !!profile,
+      pathname,
+      isLoginPage,
+      isPublicPage
+    });
+
+    // If no user and not on a public page, redirect to login
+    if (!user && !isPublicPage) {
+      console.log('Redirecting to login - no user');
+      router.push(`/login?redirectTo=${encodeURIComponent(pathname)}`);
+      return;
+    }
+
+    // If user exists but no profile yet, wait for profile to load
+    if (user && !profile) {
+      console.log('User exists but profile loading...');
+      return;
+    }
+
+    // If user is authenticated and on login page, redirect to dashboard
+    if (user && profile && isLoginPage) {
+      console.log('Redirecting to dashboard - user authenticated on login page');
+      router.push('/dashboard');
+      return;
+    }
+
+    // If on root path and authenticated, redirect to dashboard
+    if (user && profile && pathname === '/') {
+      console.log('Redirecting to dashboard - user on root path');
+      router.push('/dashboard');
+      return;
+    }
+  }, [user, profile, isLoading, pathname, router]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     try {
-      profileFetchedRef.current = false; // Reset for new sign in
+      console.log('Attempting sign in for:', email);
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Sign in error:', error);
+        throw error;
+      }
       
+      console.log('Sign in successful');
       return { error: null, success: true };
     } catch (error: any) {
+      console.error('Sign in failed:', error);
       return { error, success: false };
     }
   }, []);
 
   const signOut = useCallback(async () => {
     try {
-      profileFetchedRef.current = false;
+      console.log('Signing out...');
+      
+      setIsLoading(true);
       await supabase.auth.signOut();
+      
+      // Clear state
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      
+      console.log('Sign out successful');
+      router.push('/login');
     } catch (error) {
-      console.error('[AUTH] Sign out error:', error);
+      console.error('Sign out error:', error);
+    } finally {
+      setIsLoading(false);
     }
-  }, []);
+  }, [router]);
 
   const canAccessUnit = useCallback((unitId: string) => {
     if (!profile) return false;
