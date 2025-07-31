@@ -1,41 +1,46 @@
+// app/page.tsx
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 
 export default function HomePage() {
   const router = useRouter();
-  const { user, isLoading } = useAuth();
-  const hasRedirectedRef = useRef(false);
+  const { user, profile, isLoading } = useAuth();
 
   useEffect(() => {
-    if (isLoading || hasRedirectedRef.current) return;
+    if (isLoading) return; // Wait for auth to initialize
 
-    if (user) {
-      hasRedirectedRef.current = true;
+    if (user && profile) {
+      // User is fully authenticated
+      console.log('User authenticated, redirecting to dashboard');
       router.replace('/dashboard');
     } else {
-      hasRedirectedRef.current = true;
+      // User not authenticated
+      console.log('User not authenticated, redirecting to login');
       router.replace('/login');
     }
-  }, [isLoading, user, router]);
+  }, [isLoading, user, profile, router]);
 
-  // Show loading state while checking auth or redirecting
+  // Show loading state while checking auth and redirecting
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
-        <div className="flex justify-center">
+        <div className="flex justify-center mb-4">
           <div className="h-12 w-12 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold">
             SM
           </div>
         </div>
-        <h1 className="mt-6 text-3xl font-extrabold text-gray-900">
+        <h1 className="text-3xl font-extrabold text-gray-900 mb-2">
           Smile Meter CMS
         </h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Loading...
-        </p>
+        <div className="flex items-center justify-center space-x-2">
+          <div className="w-6 h-6 border-2 border-gray-300 rounded-full border-t-indigo-600 animate-spin"></div>
+          <p className="text-sm text-gray-600">
+            {isLoading ? 'Initializing...' : 'Redirecting...'}
+          </p>
+        </div>
       </div>
     </div>
   );

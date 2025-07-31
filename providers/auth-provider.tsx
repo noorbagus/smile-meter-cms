@@ -1,7 +1,8 @@
+// providers/auth-provider.tsx
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
@@ -37,13 +38,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasInitialized, setHasInitialized] = useState(false);
   const router = useRouter();
-  const pathname = usePathname();
 
   const fetchUserProfile = useCallback(async (userId: string) => {
     try {
       console.log('Fetching user profile for:', userId);
-      
       const { data, error } = await supabase
         .from('users')
         .select('id, email, role')
@@ -52,29 +52,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (error) {
         console.error('Error fetching user profile:', error);
-        
-        // If profile doesn't exist, create a mock profile for testing
-        if (error.code === 'PGRST116') {
-          console.log('User profile not found, using mock profile for testing...');
-          
-          const { data: userData } = await supabase.auth.getUser();
-          if (userData.user) {
-            const mockProfile: UserProfile = {
-              id: userData.user.id,
-              email: userData.user.email || 'test@example.com',
-              role: 'admin',
-              assigned_units: []
-            };
-            
-            console.log('Created mock profile:', mockProfile);
-            setProfile(mockProfile);
-            return mockProfile;
-          }
-        }
         throw error;
       }
-      
-      console.log('User profile fetched:', data);
       
       const userProfile: UserProfile = {
         id: data.id,
@@ -83,126 +62,108 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         assigned_units: []
       };
       
-      // If store manager, get assigned units
       if (data.role === 'store_manager') {
-        try {
-          const { data: unitsData, error: unitsError } = await supabase
-            .from('units')
-            .select('id')
-            .eq('assigned_manager_id', userId);
-          
-          if (!unitsError && unitsData) {
-            userProfile.assigned_units = unitsData.map(unit => unit.id);
-          }
-        } catch (unitError) {
-          console.warn('Could not fetch assigned units:', unitError);
+        const { data: unitsData, error: unitsError } = await supabase
+          .from('units')
+          .select('id')
+          .eq('assigned_manager_id', userId);
+        
+        if (!unitsError && unitsData) {
+          userProfile.assigned_units = unitsData.map(unit => unit.id);
         }
       }
       
+      console.log('User profile fetched successfully:', userProfile);
       setProfile(userProfile);
       return userProfile;
     } catch (error) {
-      console.error('Error in fetchUserProfile:', error);
+      console.error('Error fetching user profile:', error);
       setProfile(null);
       return null;
     }
   }, []);
 
-  // Initialize auth state
   useEffect(() => {
-    console.log('Initializing auth state...');
-    
-    const getInitialSession = async () => {
+    let mounted = true;
+
+    const initializeAuth = async () => {
       try {
+        console.log('Initializing auth state...');
+        
+        // Get initial session
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
           console.error('Error getting session:', error);
-          setIsLoading(false);
+          if (mounted) {
+            setIsLoading(false);
+            setHasInitialized(true);
+          }
           return;
         }
-        
+
         console.log('Initial session:', session ? 'Found' : 'Not found');
-        
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          await fetchUserProfile(session.user.id);
+
+        if (mounted) {
+          setSession(session);
+          setUser(session?.user ?? null);
+          
+          if (session?.user) {
+            const profile = await fetchUserProfile(session.user.id);
+            if (mounted && profile) {
+              setProfile(profile);
+            }
+          }
+          
+          setIsLoading(false);
+          setHasInitialized(true);
         }
       } catch (error) {
-        console.error('Error in getInitialSession:', error);
-      } finally {
-        setIsLoading(false);
+        console.error('Error initializing auth:', error);
+        if (mounted) {
+          setIsLoading(false);
+          setHasInitialized(true);
+        }
       }
     };
-    
-    getInitialSession();
 
-    // Listen for auth changes
+    initializeAuth();
+
+    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Auth state changed:', event, session ? 'Session exists' : 'No session');
         
+        if (!mounted) return;
+
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          await fetchUserProfile(session.user.id);
+          const profile = await fetchUserProfile(session.user.id);
+          if (mounted) {
+            setProfile(profile);
+          }
         } else {
           setProfile(null);
         }
         
-        setIsLoading(false);
+        if (hasInitialized) {
+          setIsLoading(false);
+        }
       }
     );
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
-  }, [fetchUserProfile]);
-
-  // Handle redirects - VERY MINIMAL
-  useEffect(() => {
-    if (isLoading) return;
-
-    const isLoginPage = pathname === '/login';
-    const isTestPage = pathname.startsWith('/test') || pathname.startsWith('/debug');
-    const isRootPage = pathname === '/';
-
-    console.log('Auth redirect check:', {
-      isLoading,
-      hasUser: !!user,
-      hasProfile: !!profile,
-      pathname,
-      isLoginPage,
-      isTestPage,
-      isRootPage
-    });
-
-    // Skip redirect for test pages
-    if (isTestPage) {
-      console.log('On test/debug page, skipping auth redirect');
-      return;
-    }
-
-    // Only redirect if we have clear auth state
-    if (!user && !isLoginPage && !isRootPage) {
-      console.log('No user, redirecting to login');
-      router.push(`/login?redirectTo=${encodeURIComponent(pathname)}`);
-      return;
-    }
-
-    if (user && profile && (isLoginPage || isRootPage)) {
-      console.log('User authenticated, redirecting to dashboard');
-      router.push('/dashboard');
-      return;
-    }
-  }, [user, profile, isLoading, pathname, router]);
+  }, [fetchUserProfile, hasInitialized]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     try {
       console.log('Attempting sign in for:', email);
+      setIsLoading(true);
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -211,13 +172,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error('Sign in error:', error);
-        throw error;
+        setIsLoading(false);
+        return { error, success: false };
       }
       
       console.log('Sign in successful');
+      // Don't set isLoading to false here - let the auth state change handle it
       return { error: null, success: true };
     } catch (error: any) {
-      console.error('Sign in failed:', error);
+      console.error('Sign in exception:', error);
+      setIsLoading(false);
       return { error, success: false };
     }
   }, []);
@@ -225,15 +189,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     try {
       console.log('Signing out...');
-      
       await supabase.auth.signOut();
-      
-      // Clear state
-      setSession(null);
-      setUser(null);
       setProfile(null);
-      
-      console.log('Sign out successful');
       router.push('/login');
     } catch (error) {
       console.error('Sign out error:', error);
