@@ -1,13 +1,12 @@
 'use client';
 
-import { useContext, useEffect, useCallback } from 'react';
+import { useContext, useEffect, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { AuthContext } from '@/providers/auth-provider';
 
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    console.error('[useAuth] Hook used outside of AuthProvider context');
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
@@ -17,31 +16,22 @@ export function useRequireAuth(redirectTo = '/login') {
   const auth = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const hasRedirectedRef = useRef(false);
 
   useEffect(() => {
-    console.log('[useRequireAuth] Running auth check', {
-      isLoading: auth.isLoading,
-      hasUser: !!auth.user,
-      pathname,
-      redirectTo
-    });
-
-    if (!auth.isLoading) {
-      if (!auth.user) {
-        console.log('[useRequireAuth] No authenticated user, redirecting to:', redirectTo);
-        
-        // Add current path as redirect parameter if not the login page itself
-        const redirectPath = pathname !== '/login' 
-          ? `${redirectTo}?redirectTo=${encodeURIComponent(pathname)}`
-          : redirectTo;
-        
-        console.log('[useRequireAuth] Final redirect path:', redirectPath);
-        router.push(redirectPath);
-      } else {
-        console.log('[useRequireAuth] User authenticated:', auth.user.email);
+    // Only redirect if auth check is complete and no user
+    if (!auth.isLoading && !auth.user && !hasRedirectedRef.current) {
+      // Avoid redirecting to login if already on login page
+      if (pathname !== redirectTo) {
+        hasRedirectedRef.current = true;
+        console.log('[AUTH] Redirecting to login from:', pathname);
+        router.push(redirectTo);
       }
-    } else {
-      console.log('[useRequireAuth] Auth state still loading, waiting...');
+    }
+    
+    // Reset redirect flag when user becomes available
+    if (auth.user) {
+      hasRedirectedRef.current = false;
     }
   }, [auth.isLoading, auth.user, router, redirectTo, pathname]);
 
@@ -52,25 +42,26 @@ export function useRequireAdmin(redirectTo = '/dashboard') {
   const auth = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const hasRedirectedRef = useRef(false);
 
   useEffect(() => {
-    console.log('[useRequireAdmin] Running admin check', { 
-      isLoading: auth.isLoading, 
-      hasUser: !!auth.user, 
-      isAdmin: auth.isAdmin,
-      pathname
-    });
-
     if (!auth.isLoading) {
-      if (!auth.user) {
-        console.log('[useRequireAdmin] No authenticated user, redirecting to login');
-        router.push('/login');
-      } else if (!auth.isAdmin) {
-        console.log('[useRequireAdmin] User not admin, redirecting to:', redirectTo);
-        router.push(redirectTo);
-      } else {
-        console.log('[useRequireAdmin] Admin access confirmed');
+      if (!auth.user && !hasRedirectedRef.current) {
+        if (pathname !== '/login') {
+          hasRedirectedRef.current = true;
+          router.push('/login');
+        }
+      } else if (auth.user && !auth.isAdmin && !hasRedirectedRef.current) {
+        if (pathname !== redirectTo) {
+          hasRedirectedRef.current = true;
+          router.push(redirectTo);
+        }
       }
+    }
+    
+    // Reset redirect flag when appropriate
+    if (auth.user && auth.isAdmin) {
+      hasRedirectedRef.current = false;
     }
   }, [auth.isLoading, auth.user, auth.isAdmin, router, redirectTo, pathname]);
 
@@ -81,26 +72,21 @@ export function useUnitAccess(unitId: string | undefined, redirectTo = '/dashboa
   const auth = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const hasRedirectedRef = useRef(false);
 
   useEffect(() => {
-    console.log('[useUnitAccess] Checking unit access', { 
-      unitId, 
-      isLoading: auth.isLoading, 
-      hasUser: !!auth.user,
-      pathname
-    });
-
     if (!auth.isLoading && auth.user && unitId) {
-      const hasAccess = auth.canAccessUnit(unitId);
-      console.log('[useUnitAccess] Access check result:', hasAccess);
-      
-      if (!hasAccess) {
-        console.log('[useUnitAccess] Access denied, redirecting to:', redirectTo);
-        router.push(redirectTo);
+      if (!auth.canAccessUnit(unitId) && !hasRedirectedRef.current) {
+        if (pathname !== redirectTo) {
+          hasRedirectedRef.current = true;
+          router.push(redirectTo);
+        }
       }
-    } else if (!auth.isLoading && !auth.user) {
-      console.log('[useUnitAccess] No authenticated user, redirecting to login');
-      router.push('/login');
+    }
+    
+    // Reset redirect flag when access is granted
+    if (unitId && auth.canAccessUnit(unitId)) {
+      hasRedirectedRef.current = false;
     }
   }, [auth.isLoading, auth.user, unitId, auth.canAccessUnit, router, redirectTo, pathname]);
 
@@ -114,35 +100,18 @@ export function useFeatureAccess(feature: 'user_management' | 'analytics' | 'sch
   const auth = useAuth();
   
   const canAccess = useCallback(() => {
-    console.log('[useFeatureAccess] Checking access for feature:', feature, {
-      hasUser: !!auth.user,
-      isAdmin: auth.isAdmin
-    });
-    
-    if (!auth.user) {
-      console.log('[useFeatureAccess] No authenticated user, denying access');
-      return false;
-    }
-    
-    let result = false;
+    if (!auth.user) return false;
     
     switch (feature) {
       case 'user_management':
-        result = auth.isAdmin;
-        console.log('[useFeatureAccess] User management requires admin:', result);
-        break;
+        return auth.isAdmin;
       case 'analytics':
       case 'scheduling':
       case 'unit_management':
-        result = true; // All authenticated users can access these features
-        console.log(`[useFeatureAccess] Feature ${feature} accessible to all authenticated users`);
-        break;
+        return true;
       default:
-        console.log('[useFeatureAccess] Unknown feature, denying access');
-        result = false;
+        return false;
     }
-    
-    return result;
   }, [auth.user, auth.isAdmin, feature]);
   
   return {
