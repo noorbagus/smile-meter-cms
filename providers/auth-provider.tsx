@@ -1,8 +1,8 @@
 // providers/auth-provider.tsx
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
@@ -33,12 +33,23 @@ interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Public routes that don't require authentication
+const PUBLIC_ROUTES = ['/login', '/debug', '/test-dashboard', '/debug-supabase'];
+
+// Routes that require admin access
+const ADMIN_ROUTES = ['/users'];
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authInitialized, setAuthInitialized] = useState(false);
+  
   const router = useRouter();
+  const pathname = usePathname();
+  const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasHandledInitialRedirect = useRef(false);
 
   const fetchUserProfile = useCallback(async (userId: string) => {
     try {
@@ -61,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         assigned_units: []
       };
       
+      // Get assigned units for store managers
       if (data.role === 'store_manager') {
         const { data: unitsData, error: unitsError } = await supabase
           .from('units')
@@ -80,6 +92,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Centralized redirect logic
+  const handleRedirect = useCallback((user: User | null, profile: UserProfile | null, currentPath: string) => {
+    console.log('[AUTH] handleRedirect called:', { 
+      hasUser: !!user, 
+      hasProfile: !!profile, 
+      currentPath,
+      isPublicRoute: PUBLIC_ROUTES.includes(currentPath)
+    });
+
+    // Clear any existing redirect timeout
+    if (redirectTimeoutRef.current) {
+      clearTimeout(redirectTimeoutRef.current);
+      redirectTimeoutRef.current = null;
+    }
+
+    // If on public route and authenticated, redirect to dashboard
+    if (user && profile && PUBLIC_ROUTES.includes(currentPath)) {
+      console.log('[AUTH] Authenticated user on public route, redirecting to dashboard');
+      redirectTimeoutRef.current = setTimeout(() => {
+        router.replace('/dashboard');
+      }, 100);
+      return;
+    }
+
+    // If not authenticated and not on public route, redirect to login
+    if (!user && !PUBLIC_ROUTES.includes(currentPath)) {
+      console.log('[AUTH] Unauthenticated user on protected route, redirecting to login');
+      redirectTimeoutRef.current = setTimeout(() => {
+        router.replace('/login');
+      }, 100);
+      return;
+    }
+
+    // If authenticated but on admin route without admin role
+    if (user && profile && ADMIN_ROUTES.some(route => currentPath.startsWith(route)) && profile.role !== 'admin') {
+      console.log('[AUTH] Non-admin user on admin route, redirecting to dashboard');
+      redirectTimeoutRef.current = setTimeout(() => {
+        router.replace('/dashboard');
+      }, 100);
+      return;
+    }
+
+    console.log('[AUTH] No redirect needed');
+  }, [router]);
+
+  // Initialize auth state
   useEffect(() => {
     let mounted = true;
 
@@ -93,6 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.error('[AUTH] Error getting session:', error);
           if (mounted) {
             setIsLoading(false);
+            setAuthInitialized(true);
           }
           return;
         }
@@ -107,57 +166,85 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const profile = await fetchUserProfile(session.user.id);
             if (mounted) {
               setProfile(profile);
+              setIsLoading(false);
+              setAuthInitialized(true);
+              
+              // Handle initial redirect after auth is fully loaded
+              if (!hasHandledInitialRedirect.current) {
+                hasHandledInitialRedirect.current = true;
+                handleRedirect(session.user, profile, pathname);
+              }
+            }
+          } else {
+            setProfile(null);
+            setIsLoading(false);
+            setAuthInitialized(true);
+            
+            // Handle redirect for unauthenticated user
+            if (!hasHandledInitialRedirect.current) {
+              hasHandledInitialRedirect.current = true;
+              handleRedirect(null, null, pathname);
             }
           }
-          
-          setIsLoading(false);
         }
       } catch (error) {
         console.error('[AUTH] Error initializing auth:', error);
         if (mounted) {
           setIsLoading(false);
+          setAuthInitialized(true);
         }
       }
     };
 
     initializeAuth();
 
-    // Auth state listener
+    return () => {
+      mounted = false;
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, [fetchUserProfile, handleRedirect, pathname]);
+
+  // Auth state change listener
+  useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('[AUTH] Auth state changed:', event, session ? 'Session exists' : 'No session');
         
-        if (!mounted) return;
-
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
           const profile = await fetchUserProfile(session.user.id);
-          if (mounted) {
-            setProfile(profile);
-          }
+          setProfile(profile);
+          
+          // Handle redirect after auth state change
+          handleRedirect(session.user, profile, pathname);
         } else {
           setProfile(null);
-        }
-        
-        // Only set loading to false after processing is complete
-        if (mounted) {
-          setIsLoading(false);
+          
+          // Handle redirect for sign out
+          handleRedirect(null, null, pathname);
         }
       }
     );
 
     return () => {
-      mounted = false;
       subscription.unsubscribe();
     };
-  }, [fetchUserProfile]);
+  }, [fetchUserProfile, handleRedirect, pathname]);
+
+  // Handle route changes for authenticated users
+  useEffect(() => {
+    if (authInitialized && !isLoading) {
+      handleRedirect(user, profile, pathname);
+    }
+  }, [pathname, authInitialized, isLoading, user, profile, handleRedirect]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     try {
       console.log('[AUTH] Attempting sign in for:', email);
-      setIsLoading(true);
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -166,16 +253,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error('[AUTH] Sign in error:', error);
-        setIsLoading(false);
         return { error, success: false };
       }
       
       console.log('[AUTH] Sign in successful');
-      // Auth state change will handle profile fetching
+      // Auth state change will handle profile fetching and redirect
       return { error: null, success: true };
     } catch (error: any) {
       console.error('[AUTH] Sign in exception:', error);
-      setIsLoading(false);
       return { error, success: false };
     }
   }, []);
@@ -185,11 +270,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] Signing out...');
       await supabase.auth.signOut();
       setProfile(null);
-      router.push('/login');
+      // Auth state change will handle redirect
     } catch (error) {
       console.error('[AUTH] Sign out error:', error);
     }
-  }, [router]);
+  }, []);
 
   const canAccessUnit = useCallback((unitId: string) => {
     if (!profile) return false;

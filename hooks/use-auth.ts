@@ -1,7 +1,6 @@
-'use client';
+// File: hooks/use-auth.ts
 
-import { useContext, useEffect, useCallback, useRef } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useContext, useCallback } from 'react';
 import { AuthContext } from '@/providers/auth-provider';
 
 export function useAuth() {
@@ -12,77 +11,19 @@ export function useAuth() {
   return context;
 }
 
-export function useRequireAuth(redirectTo = '/login') {
+// Simplified hooks - no redirect logic, state-only
+export function useRequireAuth() {
   const auth = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
-  const hasRedirected = useRef(false);
-
-  useEffect(() => {
-    if (!auth.isLoading && !auth.user && !hasRedirected.current) {
-      if (pathname !== redirectTo) {
-        hasRedirected.current = true;
-        router.push(redirectTo);
-      }
-    }
-    
-    if (auth.user) {
-      hasRedirected.current = false;
-    }
-  }, [auth.isLoading, auth.user, router, redirectTo, pathname]);
-
   return auth;
 }
 
-export function useRequireAdmin(redirectTo = '/dashboard') {
+export function useRequireAdmin() {
   const auth = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
-  const hasRedirected = useRef(false);
-
-  useEffect(() => {
-    if (!auth.isLoading) {
-      if (!auth.user && !hasRedirected.current) {
-        if (pathname !== '/login') {
-          hasRedirected.current = true;
-          router.push('/login');
-        }
-      } else if (auth.user && !auth.isAdmin && !hasRedirected.current) {
-        if (pathname !== redirectTo) {
-          hasRedirected.current = true;
-          router.push(redirectTo);
-        }
-      }
-    }
-    
-    if (auth.user && auth.isAdmin) {
-      hasRedirected.current = false;
-    }
-  }, [auth.isLoading, auth.user, auth.isAdmin, router, redirectTo, pathname]);
-
   return auth;
 }
 
-export function useUnitAccess(unitId: string | undefined, redirectTo = '/dashboard') {
+export function useUnitAccess(unitId: string | undefined) {
   const auth = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
-  const hasRedirected = useRef(false);
-
-  useEffect(() => {
-    if (!auth.isLoading && auth.user && unitId) {
-      if (!auth.canAccessUnit(unitId) && !hasRedirected.current) {
-        if (pathname !== redirectTo) {
-          hasRedirected.current = true;
-          router.push(redirectTo);
-        }
-      }
-    }
-    
-    if (unitId && auth.canAccessUnit(unitId)) {
-      hasRedirected.current = false;
-    }
-  }, [auth.isLoading, auth.user, unitId, auth.canAccessUnit, router, redirectTo, pathname]);
 
   return {
     ...auth,

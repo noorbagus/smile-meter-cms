@@ -1,8 +1,7 @@
-// app/login/page.tsx
+// File: app/login/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { AlertCircle } from 'lucide-react';
 
@@ -11,15 +10,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { signIn, user, profile, isLoading } = useAuth();
-  const router = useRouter();
-
-  // Handle redirect when user is authenticated
-  useEffect(() => {
-    if (!isLoading && user && profile) {
-      router.replace('/dashboard');
-    }
-  }, [isLoading, user, profile, router]);
+  const { signIn, isLoading } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,8 +29,9 @@ export default function LoginPage() {
         return;
       }
       
+      // AuthProvider will handle redirect on success
       if (success) {
-        // Auth provider will handle redirect
+        console.log('[LOGIN] Sign in successful, AuthProvider will handle redirect');
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred during sign in');
@@ -47,7 +39,7 @@ export default function LoginPage() {
     }
   };
 
-  // Show loading while checking auth state
+  // Show loading while AuthProvider initializes
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -59,18 +51,7 @@ export default function LoginPage() {
     );
   }
 
-  // If user is already authenticated, show loading while redirecting
-  if (user && profile) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-gray-300 rounded-full border-t-indigo-600 animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600">Redirecting to dashboard...</p>
-        </div>
-      </div>
-    );
-  }
-
+  // Render login form - AuthProvider handles authenticated state redirects
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">

@@ -1,3 +1,4 @@
+// File: app/layout.tsx
 import './globals.css';
 import { Inter } from 'next/font/google';
 import { AuthProvider } from '@/providers/auth-provider';
@@ -10,10 +11,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className} suppressHydrationWarning>
         <AuthProvider>
-          {children}
+          <div id="root">
+            {children}
+          </div>
         </AuthProvider>
       </body>
     </html>

@@ -1,3 +1,4 @@
+// File: app/dashboard/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -45,25 +46,8 @@ interface Unit {
   usage_today?: number;
 }
 
-// Loading component
-function DashboardLoading() {
-  return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="animate-pulse">
-        <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-gray-100 p-6 rounded-xl h-32"></div>
-          ))}
-        </div>
-        <div className="bg-gray-100 rounded-xl h-64"></div>
-      </div>
-    </div>
-  );
-}
-
 export default function DashboardPage() {
-  const { user, profile, isLoading } = useAuth();
+  const { user, profile } = useAuth();
   const [units, setUnits] = useState<Unit[]>([]);
   const [isLoadingUnits, setIsLoadingUnits] = useState(true);
   
@@ -72,9 +56,6 @@ export default function DashboardPage() {
       if (!user || !profile) return;
       
       try {
-        console.log('Fetching units for user:', user.id, 'role:', profile.role);
-        
-        // Build query based on user role
         let query = supabase
           .from('units')
           .select(`
@@ -85,7 +66,6 @@ export default function DashboardPage() {
             updated_at
           `);
 
-        // For non-admin users, only show units they manage
         if (profile.role !== 'admin') {
           query = query.eq('assigned_manager_id', user.id);
         }
@@ -97,16 +77,13 @@ export default function DashboardPage() {
           return;
         }
         
-        console.log('Units fetched:', data);
-        
-        // Transform data to include mock status and usage
         const transformedUnits: Unit[] = data.map(unit => ({
           id: unit.id,
           name: unit.name,
-          manager_name: 'Store Manager', // Will be replaced with actual data
+          manager_name: 'Store Manager',
           status: 'active' as const,
           last_updated: new Date(unit.updated_at).toLocaleDateString(),
-          usage_today: Math.floor(Math.random() * 50) // Mock data
+          usage_today: Math.floor(Math.random() * 50)
         }));
         
         setUnits(transformedUnits);
@@ -117,33 +94,30 @@ export default function DashboardPage() {
       }
     };
     
-    if (user && profile) {
-      fetchUnits();
-    } else if (!isLoading) {
-      setIsLoadingUnits(false);
-    }
-  }, [user, profile, isLoading]);
+    fetchUnits();
+  }, [user, profile]);
   
-  // Show loading while auth is being determined
-  if (isLoading) {
-    return <DashboardLoading />;
-  }
-  
-  // Show loading while units are being fetched
   if (isLoadingUnits) {
-    return <DashboardLoading />;
-  }
-  
-  // If no user or profile, the AuthProvider will handle redirect
-  if (!user || !profile) {
-    return <div>Redirecting...</div>;
+    return (
+      <div className="p-4 sm:p-6 lg:p-8">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="bg-gray-100 p-6 rounded-xl h-32"></div>
+            ))}
+          </div>
+          <div className="bg-gray-100 rounded-xl h-64"></div>
+        </div>
+      </div>
+    );
   }
   
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-1">Welcome back, {profile.email}</p>
+        <p className="text-gray-600 mt-1">Welcome back, {profile?.email}</p>
       </div>
       
       {/* Stats Section */}
@@ -162,7 +136,7 @@ export default function DashboardPage() {
         />
         <StatCard 
           title="Total Users" 
-          value={profile.role === 'admin' ? 8 : 1} 
+          value={profile?.role === 'admin' ? 8 : 1} 
           trend={{ value: "+2", label: "new this week" }}
           icon={<Users className="h-5 w-5 text-indigo-600" />}
         />
