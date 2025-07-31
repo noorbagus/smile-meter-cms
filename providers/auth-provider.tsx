@@ -1,9 +1,10 @@
 // providers/auth-provider.tsx
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User } from '@supabase/supabase-js';
-import { createClient } from '@/utils/supabase/client';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { Session, User } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 
 type UserRole = 'admin' | 'store_manager';
 
@@ -12,162 +13,211 @@ interface UserProfile {
   email: string;
   role: UserRole;
   assigned_units?: string[];
+  name?: string;
 }
 
 interface AuthContextType {
+  session: Session | null;
   user: User | null;
   profile: UserProfile | null;
   isLoading: boolean;
   isAdmin: boolean;
   isStoreManager: boolean;
+  signIn: (email: string, password: string) => Promise<{
+    error: Error | null;
+    success: boolean;
+  }>;
   signOut: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
   canAccessUnit: (unitId: string) => boolean;
 }
 
-// Create context with default values
-export const AuthContext = createContext<AuthContextType>({
-  user: null,
-  profile: null,
-  isLoading: true,
-  isAdmin: false,
-  isStoreManager: false,
-  signOut: async () => {},
-  refreshProfile: async () => {},
-  canAccessUnit: () => false,
-});
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const supabase = createClient();
+  const [hasInitialized, setHasInitialized] = useState(false);
+  const router = useRouter();
 
-  // Fetch user profile data
-  const fetchUserProfile = async (userId: string) => {
+  const fetchUserProfile = useCallback(async (userId: string) => {
     try {
+      console.log('Fetching user profile for:', userId);
       const { data, error } = await supabase
         .from('users')
         .select('id, email, role')
         .eq('id', userId)
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching user profile:', error);
+        throw error;
+      }
       
       const userProfile: UserProfile = {
         id: data.id,
         email: data.email,
         role: data.role as UserRole,
-        assigned_units: [],
+        assigned_units: []
       };
       
       if (data.role === 'store_manager') {
-        const { data: unitsData } = await supabase
+        const { data: unitsData, error: unitsError } = await supabase
           .from('units')
           .select('id')
           .eq('assigned_manager_id', userId);
         
-        userProfile.assigned_units = unitsData?.map(unit => unit.id) || [];
+        if (!unitsError && unitsData) {
+          userProfile.assigned_units = unitsData.map(unit => unit.id);
+        }
       }
       
+      console.log('User profile fetched successfully:', userProfile);
       setProfile(userProfile);
       return userProfile;
     } catch (error) {
       console.error('Error fetching user profile:', error);
+      setProfile(null);
       return null;
     }
-  };
+  }, []);
 
-  // Initialize auth state
   useEffect(() => {
-    const initAuth = async () => {
-      setIsLoading(true);
-      
-      // Get current session
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user || null);
-      
-      if (session?.user) {
-        await fetchUserProfile(session.user.id);
-      }
-      
-      setIsLoading(false);
-      
-      // Set up auth state change listener
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
-          setUser(session?.user || null);
+    let mounted = true;
+
+    const initializeAuth = async () => {
+      try {
+        console.log('Initializing auth state...');
+        
+        // Get initial session
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting session:', error);
+          if (mounted) {
+            setIsLoading(false);
+            setHasInitialized(true);
+          }
+          return;
+        }
+
+        console.log('Initial session:', session ? 'Found' : 'Not found');
+
+        if (mounted) {
+          setSession(session);
+          setUser(session?.user ?? null);
           
           if (session?.user) {
-            await fetchUserProfile(session.user.id);
-          } else {
-            setProfile(null);
+            const profile = await fetchUserProfile(session.user.id);
+            if (mounted && profile) {
+              setProfile(profile);
+            }
           }
           
           setIsLoading(false);
+          setHasInitialized(true);
         }
-      );
-      
-      return () => {
-        subscription.unsubscribe();
-      };
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        if (mounted) {
+          setIsLoading(false);
+          setHasInitialized(true);
+        }
+      }
     };
-    
-    initAuth();
+
+    initializeAuth();
+
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth state changed:', event, session ? 'Session exists' : 'No session');
+        
+        if (!mounted) return;
+
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          const profile = await fetchUserProfile(session.user.id);
+          if (mounted) {
+            setProfile(profile);
+          }
+        } else {
+          setProfile(null);
+        }
+        
+        if (hasInitialized) {
+          setIsLoading(false);
+        }
+      }
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [fetchUserProfile, hasInitialized]);
+
+  const signIn = useCallback(async (email: string, password: string) => {
+    try {
+      console.log('Attempting sign in for:', email);
+      setIsLoading(true);
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        console.error('Sign in error:', error);
+        setIsLoading(false);
+        return { error, success: false };
+      }
+      
+      console.log('Sign in successful');
+      // Don't set isLoading to false here - let the auth state change handle it
+      return { error: null, success: true };
+    } catch (error: any) {
+      console.error('Sign in exception:', error);
+      setIsLoading(false);
+      return { error, success: false };
+    }
   }, []);
 
-  // Sign out function - using new approach
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     try {
-      // The actual signOut is handled by the server action
-      // This is just for client-side state cleanup
-      setUser(null);
+      console.log('Signing out...');
+      await supabase.auth.signOut();
       setProfile(null);
-      
-      // Redirect is handled by the server action
-      window.location.href = '/api/auth/signout';
+      router.push('/login');
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error('Sign out error:', error);
     }
-  };
+  }, [router]);
 
-  // Refresh user profile
-  const refreshProfile = async () => {
-    if (user) {
-      await fetchUserProfile(user.id);
-    }
-  };
-
-  // Check if user has access to a unit
-  const canAccessUnit = (unitId: string) => {
+  const canAccessUnit = useCallback((unitId: string) => {
     if (!profile) return false;
     if (profile.role === 'admin') return true;
     return profile.assigned_units?.includes(unitId) || false;
+  }, [profile]);
+
+  const value = {
+    session,
+    user,
+    profile,
+    isLoading,
+    isAdmin: profile?.role === 'admin' || false,
+    isStoreManager: profile?.role === 'store_manager' || false,
+    signIn,
+    signOut,
+    canAccessUnit,
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        profile,
-        isLoading,
-        isAdmin: profile?.role === 'admin' || false,
-        isStoreManager: profile?.role === 'store_manager' || false,
-        signOut,
-        refreshProfile,
-        canAccessUnit,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
-}
-
-// Hook for accessing auth context
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 }
