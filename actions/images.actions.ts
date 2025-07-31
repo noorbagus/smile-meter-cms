@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { supabase } from '@/lib/supabase';
-import { RewardCategory } from '@/types/unit.types';
+import { RewardCategory, UnitImage } from '@/types/unit.types';
 import { UploadResult } from '@/types/image.types';
 
 /**
@@ -52,7 +52,7 @@ export async function uploadUnitImage(
   category: RewardCategory,
   file: File,
   userId: string
-): Promise<UploadResult> {
+): Promise<UploadResult<UnitImage>> {
   try {
     // Validate file
     const validation = validateImage(file);
@@ -194,9 +194,15 @@ export async function uploadUnitImage(
     revalidatePath(`/units/${unitId}`);
     revalidatePath('/units');
     
+    // Type assertion to ensure compatibility
+    const typedResult: UnitImage = {
+      ...result,
+      category: result.category as RewardCategory
+    };
+    
     return {
       success: true,
-      data: result,
+      data: typedResult,
       message: 'Image uploaded successfully'
     };
   } catch (error: any) {
@@ -211,7 +217,7 @@ export async function uploadUnitImage(
 /**
  * Delete a unit image
  */
-export async function deleteUnitImage(imageId: string): Promise<UploadResult> {
+export async function deleteUnitImage(imageId: string): Promise<UploadResult<void>> {
   try {
     // Check authentication
     const { data: { session } } = await supabase.auth.getSession();
@@ -382,8 +388,8 @@ export async function getUnitImages(unitId: string) {
       };
     }
     
-    // Group images by category
-    const groupedImages: Record<RewardCategory, any> = {
+    // Group images by category with type assertion
+    const groupedImages: Record<RewardCategory, UnitImage | null> = {
       small_prize: null,
       medium_prize: null,
       top_prize: null
@@ -391,7 +397,11 @@ export async function getUnitImages(unitId: string) {
     
     data.forEach(image => {
       if (image.category && ['small_prize', 'medium_prize', 'top_prize'].includes(image.category)) {
-        groupedImages[image.category as RewardCategory] = image;
+        const typedImage: UnitImage = {
+          ...image,
+          category: image.category as RewardCategory
+        };
+        groupedImages[image.category as RewardCategory] = typedImage;
       }
     });
     

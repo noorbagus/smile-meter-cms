@@ -43,10 +43,10 @@ export interface UploadImageParams {
   userId: string;
 }
 
-// Result of image upload
-export interface UploadResult {
+// Result of image upload - made generic to handle different data types
+export interface UploadResult<T = any> {
   success: boolean;
-  data?: UnitImage;
+  data?: T;
   error?: string;
   message: string;
 }
