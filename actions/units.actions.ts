@@ -151,7 +151,7 @@ export async function deleteUnit(unitId: string): Promise<{ success: boolean; er
     
     // Delete associated images first
     const { error: imagesError } = await supabase
-      .from('unit_images')
+      .from('unit-images')
       .delete()
       .eq('unit_id', unitId);
     

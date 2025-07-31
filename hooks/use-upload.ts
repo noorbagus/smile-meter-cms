@@ -20,7 +20,7 @@ interface UploadResult {
 
 export function useUpload(options: UploadOptions = {}) {
   const {
-    bucket = 'unit_images',
+    bucket = 'unit-images',
     path = '',
     maxSizeInMB = 5,
     allowedTypes = ['image/jpeg', 'image/png', 'image/webp']

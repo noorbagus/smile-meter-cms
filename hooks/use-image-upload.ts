@@ -111,7 +111,7 @@ export function useImageUpload() {
       // Upload to Supabase Storage
       const { data, error: uploadError } = await supabase
         .storage
-        .from('unit_images')
+        .from('unit-images')
         .upload(filePath, file);
       
       if (uploadError) throw uploadError;
@@ -121,7 +121,7 @@ export function useImageUpload() {
       // Get public URL
       const { data: { publicUrl } } = supabase
         .storage
-        .from('unit_images')
+        .from('unit-images')
         .getPublicUrl(filePath);
       
       setUploadProgress(75);
@@ -129,7 +129,7 @@ export function useImageUpload() {
       
       // Check if an image already exists for this category
       const { data: existingImage } = await supabase
-        .from('unit_images')
+        .from('unit-images')
         .select('id')
         .eq('unit_id', unitId)
         .eq('category', category)
@@ -140,7 +140,7 @@ export function useImageUpload() {
       if (existingImage) {
         // Update existing image
         const { data, error: updateError } = await supabase
-          .from('unit_images')
+          .from('unit-images')
           .update({
             image_url: publicUrl,
             updated_by: userId,
@@ -155,7 +155,7 @@ export function useImageUpload() {
       } else {
         // Insert new image
         const { data, error: insertError } = await supabase
-          .from('unit_images')
+          .from('unit-images')
           .insert({
             unit_id: unitId,
             category,

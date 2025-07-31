@@ -53,7 +53,7 @@ export interface Database {
           }
         ]
       }
-      unit_images: {
+      unit-images: {
         Row: {
           id: string
           unit_id: string
@@ -80,13 +80,13 @@ export interface Database {
         }
         Relationships: [
           {
-            foreignKeyName: "unit_images_unit_id_fkey"
+            foreignKeyName: "unit-images_unit_id_fkey"
             columns: ["unit_id"]
             referencedRelation: "units"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "unit_images_updated_by_fkey"
+            foreignKeyName: "unit-images_updated_by_fkey"
             columns: ["updated_by"]
             referencedRelation: "users"
             referencedColumns: ["id"]

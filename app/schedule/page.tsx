@@ -138,14 +138,14 @@ export default function SchedulePage() {
       const filePath = `units/${selectedUnit}/${selectedCategory}/${fileName}`;
 
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('unit_images')
+        .from('unit-images')
         .upload(filePath, selectedFile);
 
       if (uploadError) throw uploadError;
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
-        .from('unit_images')
+        .from('unit-images')
         .getPublicUrl(filePath);
 
       // Save scheduled image to database
@@ -186,7 +186,7 @@ export default function SchedulePage() {
       const urlParts = imageUrl.split('/');
       const filePath = urlParts.slice(urlParts.indexOf('units')).join('/');
       
-      await supabase.storage.from('unit_images').remove([filePath]);
+      await supabase.storage.from('unit-images').remove([filePath]);
 
       // Delete from database
       const { error } = await supabase

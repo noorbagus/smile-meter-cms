@@ -32,7 +32,7 @@ export async function POST(
     
     const { data: storageData, error: storageError } = await supabase
       .storage
-      .from('unit_images')
+      .from('unit-images')
       .upload(filePath, image);
     
     if (storageError) {
@@ -45,12 +45,12 @@ export async function POST(
     // Get public URL
     const { data: { publicUrl } } = supabase
       .storage
-      .from('unit_images')
+      .from('unit-images')
       .getPublicUrl(filePath);
     
     // Save to database
     const { data: existingImage } = await supabase
-      .from('unit_images')
+      .from('unit-images')
       .select('id')
       .eq('unit_id', unitId)
       .eq('category', category)
@@ -61,7 +61,7 @@ export async function POST(
     if (existingImage) {
       // Update existing image
       const { data, error: dbError } = await supabase
-        .from('unit_images')
+        .from('unit-images')
         .update({
           image_url: publicUrl,
           updated_by: userId,
@@ -82,7 +82,7 @@ export async function POST(
     } else {
       // Insert new image
       const { data, error: dbError } = await supabase
-        .from('unit_images')
+        .from('unit-images')
         .insert({
           unit_id: unitId,
           category,
@@ -126,7 +126,7 @@ export async function GET(
     const supabase = getServiceSupabase();
     
     const { data, error } = await supabase
-      .from('unit_images')
+      .from('unit-images')
       .select('*')
       .eq('unit_id', unitId);
     

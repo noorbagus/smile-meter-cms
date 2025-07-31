@@ -82,7 +82,7 @@ export function useUnits() {
       
       // Get unit images
       const { data: imagesData, error: imagesError } = await supabase
-        .from('unit_images')
+        .from('unit-images')
         .select('*')
         .eq('unit_id', unitId);
       
@@ -240,7 +240,7 @@ export function useUnits() {
       // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase
         .storage
-        .from('unit_images')
+        .from('unit-images')
         .upload(filePath, file);
       
       if (uploadError) throw uploadError;
@@ -248,12 +248,12 @@ export function useUnits() {
       // Get public URL
       const { data: { publicUrl } } = supabase
         .storage
-        .from('unit_images')
+        .from('unit-images')
         .getPublicUrl(filePath);
       
       // Save to database
       const { error: dbError } = await supabase
-        .from('unit_images')
+        .from('unit-images')
         .upsert({
           unit_id: unitId,
           category,

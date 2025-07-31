@@ -35,7 +35,7 @@ export function useUnitImages(): UseUnitImagesResult {
     
     try {
       const { data, error } = await supabase
-        .from('unit_images')
+        .from('unit-images')
         .select('*')
         .eq('unit_id', unitId);
       
@@ -94,7 +94,7 @@ export function useUnitImages(): UseUnitImagesResult {
       // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase
         .storage
-        .from('unit_images')
+        .from('unit-images')
         .upload(filePath, file);
       
       if (uploadError) throw uploadError;
@@ -102,12 +102,12 @@ export function useUnitImages(): UseUnitImagesResult {
       // Get public URL
       const { data: { publicUrl } } = supabase
         .storage
-        .from('unit_images')
+        .from('unit-images')
         .getPublicUrl(filePath);
       
       // Check if an image already exists for this category
       const { data: existingImage } = await supabase
-        .from('unit_images')
+        .from('unit-images')
         .select('id')
         .eq('unit_id', unitId)
         .eq('category', category)
@@ -118,7 +118,7 @@ export function useUnitImages(): UseUnitImagesResult {
       if (existingImage) {
         // Update existing image
         const { data, error: updateError } = await supabase
-          .from('unit_images')
+          .from('unit-images')
           .update({
             image_url: publicUrl,
             updated_by: userId,
@@ -133,7 +133,7 @@ export function useUnitImages(): UseUnitImagesResult {
       } else {
         // Insert new image
         const { data, error: insertError } = await supabase
-          .from('unit_images')
+          .from('unit-images')
           .insert({
             unit_id: unitId,
             category,
@@ -173,7 +173,7 @@ export function useUnitImages(): UseUnitImagesResult {
     try {
       // Get image data first to get the file path
       const { data: imageData, error: fetchError } = await supabase
-        .from('unit_images')
+        .from('unit-images')
         .select('*')
         .eq('id', imageId)
         .single();
@@ -182,20 +182,20 @@ export function useUnitImages(): UseUnitImagesResult {
       
       // Extract file path from URL
       const imageUrl = imageData.image_url;
-      const storageUrl = supabase.storage.from('unit_images').getPublicUrl('').data.publicUrl;
+      const storageUrl = supabase.storage.from('unit-images').getPublicUrl('').data.publicUrl;
       const filePath = imageUrl.replace(storageUrl + '/', '');
       
       // Delete from storage
       const { error: storageError } = await supabase
         .storage
-        .from('unit_images')
+        .from('unit-images')
         .remove([filePath]);
       
       if (storageError) throw storageError;
       
       // Delete from database
       const { error: dbError } = await supabase
-        .from('unit_images')
+        .from('unit-images')
         .delete()
         .eq('id', imageId);
       

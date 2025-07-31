@@ -114,7 +114,7 @@ export async function uploadUnitImage(
     // Upload file to Supabase Storage
     const arrayBuffer = await file.arrayBuffer();
     const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('unit_images')
+      .from('unit-images')
       .upload(filePath, arrayBuffer, {
         contentType: file.type,
         cacheControl: '3600',
@@ -130,12 +130,12 @@ export async function uploadUnitImage(
     
     // Get public URL
     const { data: { publicUrl } } = supabase.storage
-      .from('unit_images')
+      .from('unit-images')
       .getPublicUrl(filePath);
     
     // Check if an image already exists for this category
     const { data: existingImage } = await supabase
-      .from('unit_images')
+      .from('unit-images')
       .select('id')
       .eq('unit_id', unitId)
       .eq('category', category)
@@ -146,7 +146,7 @@ export async function uploadUnitImage(
     if (existingImage) {
       // Update existing image record
       const { data, error } = await supabase
-        .from('unit_images')
+        .from('unit-images')
         .update({
           image_url: publicUrl,
           updated_by: userId,
@@ -168,7 +168,7 @@ export async function uploadUnitImage(
     } else {
       // Create new image record
       const { data, error } = await supabase
-        .from('unit_images')
+        .from('unit-images')
         .insert({
           unit_id: unitId,
           category,
@@ -232,7 +232,7 @@ export async function deleteUnitImage(imageId: string): Promise<UploadResult<voi
     
     // Get image details
     const { data: imageData, error: imageError } = await supabase
-      .from('unit_images')
+      .from('unit-images')
       .select('unit_id, image_url')
       .eq('id', imageId)
       .single();
@@ -280,11 +280,11 @@ export async function deleteUnitImage(imageId: string): Promise<UploadResult<voi
     // Extract storage path from image URL
     const urlObj = new URL(imageData.image_url);
     const pathSegments = urlObj.pathname.split('/');
-    const storagePath = pathSegments.slice(pathSegments.indexOf('unit_images') + 1).join('/');
+    const storagePath = pathSegments.slice(pathSegments.indexOf('unit-images') + 1).join('/');
     
     // Delete from storage
     const { error: storageError } = await supabase.storage
-      .from('unit_images')
+      .from('unit-images')
       .remove([storagePath]);
     
     if (storageError) {
@@ -297,7 +297,7 @@ export async function deleteUnitImage(imageId: string): Promise<UploadResult<voi
     
     // Delete from database
     const { error } = await supabase
-      .from('unit_images')
+      .from('unit-images')
       .delete()
       .eq('id', imageId);
     
@@ -376,7 +376,7 @@ export async function getUnitImages(unitId: string) {
     
     // Get images
     const { data, error } = await supabase
-      .from('unit_images')
+      .from('unit-images')
       .select('*')
       .eq('unit_id', unitId);
     
