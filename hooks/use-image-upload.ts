@@ -2,34 +2,22 @@
 
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { 
-  validateImage, 
-  formatFileSize, 
-  generateUniqueFilename 
-} from '@/lib/image-utils';
 import { RewardCategory } from '@/types/unit.types';
-import { UploadStatus, UploadResult } from '@/types/upload.types';
 
-interface UseImageUploadOptions {
-  maxSizeInMB?: number;
-  allowedTypes?: string[];
-}
-
-interface UseImageUploadResult {
-  uploadImage: (params: UploadImageParams) => Promise<UploadResult>;
-  uploadProgress: number;
-  uploadStatus: UploadStatus;
-  fileDetails: FileDetails | null;
-  error: string | null;
-  reset: () => void;
-  cancelUpload: () => void;
-}
+export type UploadStatus = 'idle' | 'uploading' | 'processing' | 'success' | 'error' | 'canceled';
 
 interface UploadImageParams {
   unitId: string;
   category: RewardCategory;
   file: File;
   userId: string;
+}
+
+interface UploadResult {
+  success: boolean;
+  data?: any;
+  error?: string;
+  message: string;
 }
 
 interface FileDetails {
@@ -39,12 +27,7 @@ interface FileDetails {
   previewUrl?: string;
 }
 
-export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUploadResult {
-  const { 
-    maxSizeInMB = 5, 
-    allowedTypes = ['image/jpeg', 'image/png', 'image/webp'] 
-  } = options;
-  
+export function useImageUpload() {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
   const [fileDetails, setFileDetails] = useState<FileDetails | null>(null);
@@ -66,6 +49,30 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
     }
   }, [abortController]);
 
+  const validateImage = useCallback((file: File): { valid: boolean; error?: string } => {
+    const maxSizeInMB = 5;
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    
+    // Check file size
+    const maxSizeInBytes = maxSizeInMB * 1024 * 1024;
+    if (file.size > maxSizeInBytes) {
+      return {
+        valid: false,
+        error: `File size exceeds ${maxSizeInMB}MB limit`
+      };
+    }
+    
+    // Check file type
+    if (!allowedTypes.includes(file.type)) {
+      return {
+        valid: false,
+        error: 'Only JPEG, PNG, and WebP images are supported'
+      };
+    }
+    
+    return { valid: true };
+  }, []);
+
   const uploadImage = useCallback(async ({ unitId, category, file, userId }: UploadImageParams): Promise<UploadResult> => {
     // Reset state
     setUploadProgress(0);
@@ -74,7 +81,7 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
     
     try {
       // Validate file
-      const validation = validateImage(file, maxSizeInMB, allowedTypes);
+      const validation = validateImage(file);
       if (!validation.valid) {
         throw new Error(validation.error);
       }
@@ -82,22 +89,9 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
       // Set file details
       setFileDetails({
         name: file.name,
-        size: formatFileSize(file.size),
+        size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
         type: file.type,
       });
-      
-      // Create file reader for preview
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        // Fixed null check
-        if (e.target?.result) {
-          setFileDetails(prev => prev ? {
-            ...prev,
-            previewUrl: e.target!.result as string
-          } : null);
-        }
-      };
-      reader.readAsDataURL(file);
       
       // Start upload
       setUploadStatus('uploading');
@@ -108,10 +102,13 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
       
       // Generate a unique file path
       const fileExt = file.name.split('.').pop() || 'jpg';
-      const fileName = generateUniqueFilename(file.name, `unit_${unitId}_${category}_`);
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
       const filePath = `units/${unitId}/${category}/${fileName}`;
       
-      // Upload to Supabase Storage with manual progress tracking
+      // Simulate progress
+      setUploadProgress(25);
+      
+      // Upload to Supabase Storage
       const { data, error: uploadError } = await supabase
         .storage
         .from('unit_images')
@@ -119,7 +116,7 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
       
       if (uploadError) throw uploadError;
       
-      setUploadProgress(50); // Simulate progress
+      setUploadProgress(50);
       
       // Get public URL
       const { data: { publicUrl } } = supabase
@@ -130,7 +127,7 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
       setUploadProgress(75);
       setUploadStatus('processing');
       
-      // Update database
+      // Check if an image already exists for this category
       const { data: existingImage } = await supabase
         .from('unit_images')
         .select('id')
@@ -193,7 +190,7 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
         message: errorMessage
       };
     }
-  }, [maxSizeInMB, allowedTypes]);
+  }, [validateImage]);
 
   return {
     uploadImage,
