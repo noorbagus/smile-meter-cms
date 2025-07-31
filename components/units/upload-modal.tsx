@@ -1,3 +1,4 @@
+// components/units/upload-modal.tsx
 'use client';
 
 import { useState, useRef } from 'react';
@@ -71,9 +72,21 @@ export default function UploadModal({
       });
       
       if (result.success) {
+        // Wait a moment for the upload to be processed
         setTimeout(() => {
+          // Reset form state
+          setSelectedFile(null);
+          reset();
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+          
+          // Call the callback to refresh parent component
           onUploadComplete();
-        }, 1000); // Give time to see success state
+          
+          // Close modal
+          onClose();
+        }, 1000);
       }
     } catch (err) {
       console.error('Error uploading image:', err);
@@ -86,6 +99,9 @@ export default function UploadModal({
     }
     reset();
     setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
     onClose();
   };
 
@@ -195,8 +211,10 @@ export default function UploadModal({
               
               <div className="flex justify-end">
                 {uploadStatus === 'success' ? (
-                  <Button onClick={onUploadComplete}>
-                    Done
+                  <Button onClick={() => {
+                    // Don't close immediately, let the timeout handle it
+                  }}>
+                    Processing...
                   </Button>
                 ) : uploadStatus === 'error' ? (
                   <div className="space-x-2">

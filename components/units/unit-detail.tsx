@@ -1,6 +1,7 @@
+// components/units/unit-detail.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Edit, Trash2, Upload, Calendar, BarChart2 } from 'lucide-react';
 import { UnitWithImages, UnitStats, UnitActivity } from '@/types/unit.types';
@@ -23,31 +24,37 @@ export default function UnitDetail({ unitId }: UnitDetailProps) {
   const [activities, setActivities] = useState<UnitActivity[]>([]);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const { getUnit, getUnitStats, getUnitActivity, isLoading, error } = useUnits();
   const { isAdmin, user } = useAuth();
   const router = useRouter();
 
-  useEffect(() => {
-    const fetchUnitData = async () => {
-      try {
-        // Fetch unit details
-        const unitData = await getUnit(unitId);
-        setUnit(unitData);
-        
-        // Fetch unit stats
-        const statsData = await getUnitStats(unitId);
-        setStats(statsData);
-        
-        // Fetch activity log
-        const activitiesData = await getUnitActivity(unitId);
-        setActivities(activitiesData);
-      } catch (err) {
-        console.error('Error fetching unit data:', err);
-      }
-    };
-    
-    fetchUnitData();
+  // Memoized fetch function to avoid infinite re-renders
+  const fetchUnitData = useCallback(async () => {
+    try {
+      console.log('[UnitDetail] Fetching unit data for:', unitId);
+      
+      // Fetch unit details
+      const unitData = await getUnit(unitId);
+      console.log('[UnitDetail] Unit data received:', unitData);
+      setUnit(unitData);
+      
+      // Fetch unit stats
+      const statsData = await getUnitStats(unitId);
+      setStats(statsData);
+      
+      // Fetch activity log
+      const activitiesData = await getUnitActivity(unitId);
+      setActivities(activitiesData);
+    } catch (err) {
+      console.error('Error fetching unit data:', err);
+    }
   }, [unitId, getUnit, getUnitStats, getUnitActivity]);
+
+  // Initial load and refresh when trigger changes
+  useEffect(() => {
+    fetchUnitData();
+  }, [fetchUnitData, refreshTrigger]);
 
   const handleUploadClick = (category: string) => {
     setSelectedCategory(category);
@@ -55,10 +62,25 @@ export default function UnitDetail({ unitId }: UnitDetailProps) {
   };
 
   const handleUploadComplete = async () => {
-    // Refetch unit data to show new images
-    const unitData = await getUnit(unitId);
-    setUnit(unitData);
+    console.log('[UnitDetail] Upload complete, refreshing data...');
+    
+    // Close modal first
     setIsUploadModalOpen(false);
+    setSelectedCategory(null);
+    
+    // Force refresh by incrementing trigger
+    setRefreshTrigger(prev => prev + 1);
+    
+    // Also manually refetch to ensure we have latest data
+    setTimeout(() => {
+      fetchUnitData();
+    }, 500);
+  };
+
+  // Manual refresh function
+  const handleRefresh = () => {
+    console.log('[UnitDetail] Manual refresh triggered');
+    setRefreshTrigger(prev => prev + 1);
   };
 
   if (isLoading || !unit) {
@@ -80,13 +102,20 @@ export default function UnitDetail({ unitId }: UnitDetailProps) {
       <div className="bg-red-50 p-4 rounded-lg text-red-800">
         <h3 className="font-medium">Error loading unit</h3>
         <p className="mt-1">{error}</p>
-        <Button 
-          variant="outline" 
-          className="mt-4"
-          onClick={() => router.push('/units')}
-        >
-          Back to Units
-        </Button>
+        <div className="mt-4 space-x-2">
+          <Button 
+            variant="outline" 
+            onClick={handleRefresh}
+          >
+            Retry
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => router.push('/units')}
+          >
+            Back to Units
+          </Button>
+        </div>
       </div>
     );
   }
@@ -105,7 +134,7 @@ export default function UnitDetail({ unitId }: UnitDetailProps) {
         </TabsList>
         
         <TabsContent value="images" className="space-y-6">
-          <div className="flex justify-end">
+          <div className="flex justify-between items-center">
             <Button 
               variant="outline"
               onClick={() => router.push(`/schedule?unitId=${unitId}`)}
@@ -114,11 +143,21 @@ export default function UnitDetail({ unitId }: UnitDetailProps) {
               <Calendar size={16} />
               <span>Schedule Images</span>
             </Button>
+            
+            <Button 
+              variant="outline"
+              onClick={handleRefresh}
+              className="flex items-center gap-2"
+            >
+              <BarChart2 size={16} />
+              <span>Refresh</span>
+            </Button>
           </div>
           
           <ImageGallery 
             images={unit.images} 
-            onUploadClick={handleUploadClick} 
+            onUploadClick={handleUploadClick}
+            key={refreshTrigger} // Force re-render when refreshTrigger changes
           />
         </TabsContent>
         
@@ -167,7 +206,10 @@ export default function UnitDetail({ unitId }: UnitDetailProps) {
           category={selectedCategory}
           userId={user?.id || ''}
           isOpen={isUploadModalOpen}
-          onClose={() => setIsUploadModalOpen(false)}
+          onClose={() => {
+            setIsUploadModalOpen(false);
+            setSelectedCategory(null);
+          }}
           onUploadComplete={handleUploadComplete}
         />
       )}
