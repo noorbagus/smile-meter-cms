@@ -74,6 +74,8 @@ export function useImageUpload() {
   }, []);
 
   const uploadImage = useCallback(async ({ unitId, category, file, userId }: UploadImageParams): Promise<UploadResult> => {
+    console.log('🔄 Starting upload...', { unitId, category, fileName: file.name, fileSize: file.size });
+    
     // Reset state
     setUploadProgress(0);
     setUploadStatus('idle');
@@ -83,8 +85,11 @@ export function useImageUpload() {
       // Validate file
       const validation = validateImage(file);
       if (!validation.valid) {
+        console.error('❌ File validation failed:', validation.error);
         throw new Error(validation.error);
       }
+      
+      console.log('✅ File validation passed');
       
       // Set file details
       setFileDetails({
@@ -105,17 +110,24 @@ export function useImageUpload() {
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
       const filePath = `units/${unitId}/${category}/${fileName}`;
       
+      console.log('📁 File path:', filePath);
+      
       // Simulate progress
       setUploadProgress(25);
       
-      // Upload to Supabase Storage (use unit-images bucket)
-      const { data, error: uploadError } = await supabase
+      // Upload to Supabase Storage
+      console.log('⬆️ Uploading to Supabase storage...');
+      const { data: uploadData, error: uploadError } = await supabase
         .storage
         .from('unit-images')
         .upload(filePath, file);
       
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('❌ Storage upload failed:', uploadError);
+        throw uploadError;
+      }
       
+      console.log('✅ Storage upload successful:', uploadData);
       setUploadProgress(50);
       
       // Get public URL
@@ -124,21 +136,31 @@ export function useImageUpload() {
         .from('unit-images')
         .getPublicUrl(filePath);
       
+      console.log('🔗 Generated public URL:', publicUrl);
       setUploadProgress(75);
       setUploadStatus('processing');
       
-      // Check if an image already exists for this category (use unit_images table)
-      const { data: existingImage } = await supabase
+      // Check if an image already exists for this category
+      console.log('🔍 Checking for existing image...');
+      const { data: existingImage, error: fetchError } = await supabase
         .from('unit_images')
         .select('id')
         .eq('unit_id', unitId)
         .eq('category', category)
-        .single();
+        .maybeSingle();
+      
+      if (fetchError) {
+        console.error('❌ Error checking existing image:', fetchError);
+        throw fetchError;
+      }
+      
+      console.log('📋 Existing image check result:', existingImage);
       
       let result;
       
       if (existingImage) {
         // Update existing image
+        console.log('🔄 Updating existing image record...');
         const { data, error: updateError } = await supabase
           .from('unit_images')
           .update({
@@ -150,10 +172,16 @@ export function useImageUpload() {
           .select()
           .single();
         
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error('❌ Database update failed:', updateError);
+          throw updateError;
+        }
+        
+        console.log('✅ Database updated successfully:', data);
         result = data;
       } else {
         // Insert new image
+        console.log('➕ Creating new image record...');
         const { data, error: insertError } = await supabase
           .from('unit_images')
           .insert({
@@ -166,13 +194,20 @@ export function useImageUpload() {
           .select()
           .single();
         
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error('❌ Database insert failed:', insertError);
+          throw insertError;
+        }
+        
+        console.log('✅ Database record created successfully:', data);
         result = data;
       }
       
       // Upload successful
       setUploadStatus('success');
       setUploadProgress(100);
+      
+      console.log('🎉 Upload completed successfully!');
       
       return {
         success: true,
@@ -181,6 +216,7 @@ export function useImageUpload() {
       };
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to upload image';
+      console.error('💥 Upload failed:', errorMessage, err);
       setError(errorMessage);
       setUploadStatus('error');
       
