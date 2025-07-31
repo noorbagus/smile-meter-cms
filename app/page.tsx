@@ -1,24 +1,31 @@
 // app/page.tsx
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 
 export default function HomePage() {
   const router = useRouter();
   const { user, profile, isLoading } = useAuth();
+  const hasRedirected = useRef(false);
 
   useEffect(() => {
-    if (isLoading) return;
+    // Prevent multiple redirects
+    if (hasRedirected.current || isLoading) return;
 
     if (user && profile) {
+      console.log('User authenticated, redirecting to dashboard');
+      hasRedirected.current = true;
       router.replace('/dashboard');
-    } else {
+    } else if (!isLoading) {
+      console.log('User not authenticated, redirecting to login');  
+      hasRedirected.current = true;
       router.replace('/login');
     }
   }, [isLoading, user, profile, router]);
 
+  // Show loading state
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
@@ -33,7 +40,7 @@ export default function HomePage() {
         <div className="flex items-center justify-center space-x-2">
           <div className="w-6 h-6 border-2 border-gray-300 rounded-full border-t-indigo-600 animate-spin"></div>
           <p className="text-sm text-gray-600">
-            {isLoading ? 'Initializing...' : 'Redirecting...'}
+            {isLoading ? 'Checking authentication...' : 'Redirecting...'}
           </p>
         </div>
       </div>
