@@ -1,64 +1,82 @@
-// app/login/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
+  console.log('[LoginPage] Rendering login page');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const { signIn, user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, signIn } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams?.get('redirectTo') || '/dashboard';
 
-  // Redirect if already authenticated
   useEffect(() => {
+    console.log('[LoginPage] useEffect running', {
+      authLoading,
+      hasUser: !!user,
+      redirectTo
+    });
+
+    // Check if user is already authenticated
     if (!authLoading && user) {
-      console.log('User already authenticated, redirecting...');
-      router.replace('/dashboard');
+      console.log('[LoginPage] User already authenticated, redirecting...', { redirectTo });
+      router.push(redirectTo);
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, redirectTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[LoginPage] Login form submitted', { email });
     setError(null);
     setIsLoading(true);
 
     try {
-      console.log('Login form submitted for email:', email);
+      console.log('[LoginPage] Attempting sign in');
       const { error, success } = await signIn(email, password);
       
       if (error) {
-        console.error('Login error:', error);
+        console.error('[LoginPage] Sign in failed:', error);
         setError(error.message);
         setIsLoading(false);
         return;
       }
       
       if (success) {
-        console.log('Login successful, waiting for auth state update...');
-        // Don't redirect here - let the useEffect handle it after auth state updates
-        // The redirect will happen automatically when user state updates
+        console.log('[LoginPage] Sign in successful, redirecting to:', redirectTo);
+        router.push(redirectTo);
       }
     } catch (err: any) {
-      console.error('Login exception:', err);
+      console.error('[LoginPage] Exception during sign in:', err);
       setError(err.message || 'An error occurred during sign in');
       setIsLoading(false);
     }
   };
 
-  // Show loading if checking auth or user exists (will redirect)
-  if (authLoading || user) {
+  if (authLoading) {
+    console.log('[LoginPage] Auth still loading, showing loading state');
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="w-12 h-12 border-4 border-gray-300 rounded-full border-t-indigo-600 animate-spin"></div>
+        <div className="text-center">
+          <div className="animate-spin h-10 w-10 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
+          <p className="mt-4 text-gray-600">Checking authentication...</p>
+        </div>
       </div>
     );
   }
 
+  // If already authenticated, don't render the login form
+  if (user) {
+    console.log('[LoginPage] User is authenticated, nothing to render (redirecting)');
+    return null;
+  }
+
+  console.log('[LoginPage] Rendering login form');
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -100,7 +118,10 @@ export default function LoginPage() {
                 autoComplete="email"
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  console.log('[LoginPage] Email input changed');
+                  setEmail(e.target.value);
+                }}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
                 placeholder="Email address"
               />
@@ -116,7 +137,10 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 required
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  console.log('[LoginPage] Password input changed');
+                  setPassword(e.target.value);
+                }}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
                 placeholder="Password"
               />
@@ -131,6 +155,11 @@ export default function LoginPage() {
             >
               {isLoading ? 'Signing in...' : 'Sign in'}
             </button>
+          </div>
+
+          {/* Debug info - remove in production */}
+          <div className="mt-4 p-3 bg-gray-100 rounded-md">
+            <p className="text-xs text-gray-500">Debug: Redirect to: {redirectTo}</p>
           </div>
         </form>
       </div>
