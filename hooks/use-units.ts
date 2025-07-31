@@ -175,7 +175,7 @@ export function useUnits() {
     }
   }, []);
 
-  // Create a new unit
+  // Create a new unit - UPDATED to return the created unit
   const createUnit = useCallback(async (payload: CreateUnitPayload): Promise<Unit | null> => {
     setIsLoading(true);
     setError(null);
@@ -187,12 +187,12 @@ export function useUnits() {
           name: payload.name,
           assigned_manager_id: payload.assigned_manager_id
         })
-        .select()
-        .single();
+        .select()  // Added to return the created unit
+        .single(); // Added to get single unit instead of array
       
       if (error) throw error;
       
-      return data;
+      return data; // Return the created unit with its ID
     } catch (err: any) {
       setError(err.message);
       return null;
@@ -217,17 +217,12 @@ export function useUnits() {
         .select()
         .single();
       
-      if (error) {
-        const errorMessage = error.message || 'Failed to update unit';
-        setError(errorMessage);
-        throw new Error(errorMessage);
-      }
+      if (error) throw error;
       
       return data;
     } catch (err: any) {
-      const errorMessage = err.message || 'Failed to update unit';
-      setError(errorMessage);
-      throw err; // Re-throw for component handling
+      setError(err.message);
+      return null;
     } finally {
       setIsLoading(false);
     }
