@@ -38,6 +38,7 @@ export default function UnitForm({
 }: UnitFormProps) {
   const [storeManagers, setStoreManagers] = useState<UserMinimal[]>([]);
   const [isLoadingManagers, setIsLoadingManagers] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const { isAdmin } = useAuth();
   const { getUsers } = useUsers();
   
@@ -65,6 +66,7 @@ export default function UnitForm({
           setStoreManagers(users || []);
         } catch (error) {
           console.error('Error fetching store managers:', error);
+          setFormError('Failed to load store managers. Please try again.');
         } finally {
           setIsLoadingManagers(false);
         }
@@ -76,10 +78,15 @@ export default function UnitForm({
 
   // Handle form submission
   const handleFormSubmit = async (data: UnitFormValues) => {
-    await onSubmit({
-      name: data.name,
-      assigned_manager_id: data.assigned_manager_id || null,
-    });
+    setFormError(null);
+    try {
+      await onSubmit({
+        name: data.name,
+        assigned_manager_id: data.assigned_manager_id || null,
+      });
+    } catch (err: any) {
+      setFormError(err.message || 'An error occurred while submitting the form');
+    }
   };
 
   // Reset form with initial data
@@ -94,6 +101,12 @@ export default function UnitForm({
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+      {formError && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+          {formError}
+        </div>
+      )}
+      
       <div className="space-y-2">
         <label 
           htmlFor="name" 
@@ -106,6 +119,7 @@ export default function UnitForm({
           placeholder="Enter unit name"
           {...register('name')}
           className={errors.name ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}
+          disabled={isSubmitting}
         />
         {errors.name && (
           <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
@@ -125,7 +139,7 @@ export default function UnitForm({
               id="assigned_manager_id"
               {...register('assigned_manager_id')}
               className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              disabled={isLoadingManagers}
+              disabled={isLoadingManagers || isSubmitting}
             >
               <option value="">None</option>
               {storeManagers.map((manager) => (

@@ -217,12 +217,17 @@ export function useUnits() {
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        const errorMessage = error.message || 'Failed to update unit';
+        setError(errorMessage);
+        throw new Error(errorMessage);
+      }
       
       return data;
     } catch (err: any) {
-      setError(err.message);
-      return null;
+      const errorMessage = err.message || 'Failed to update unit';
+      setError(errorMessage);
+      throw err; // Re-throw for component handling
     } finally {
       setIsLoading(false);
     }
