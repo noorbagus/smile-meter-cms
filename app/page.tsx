@@ -1,3 +1,4 @@
+// app/page.tsx
 'use client';
 
 import { useEffect } from 'react';
@@ -11,11 +12,11 @@ export default function HomePage() {
   useEffect(() => {
     if (!isLoading) {
       if (user) {
-        // Redirect authenticated users to dashboard
-        router.push('/dashboard');
+        console.log('Root: User authenticated, redirecting to dashboard');
+        router.replace('/dashboard');
       } else {
-        // Redirect unauthenticated users to login
-        router.push('/login');
+        console.log('Root: No user, redirecting to login');
+        router.replace('/login');
       }
     }
   }, [isLoading, user, router]);

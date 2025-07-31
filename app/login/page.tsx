@@ -1,6 +1,7 @@
+// app/login/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { AlertCircle } from 'lucide-react';
@@ -10,37 +11,53 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const { signIn } = useAuth();
+  const { signIn, user, isLoading: authLoading } = useAuth();
   const router = useRouter();
 
-// app/login/page.tsx
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  console.log("Login form submitted for email:", email);
-  setError(null);
-  setIsLoading(true);
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (!authLoading && user) {
+      console.log('User already authenticated, redirecting...');
+      router.replace('/dashboard');
+    }
+  }, [user, authLoading, router]);
 
-  try {
-    console.log("Calling signIn function");
-    const { error, success } = await signIn(email, password);
-    
-    if (error) {
-      console.error("Login error returned:", error);
-      setError(error.message);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      console.log('Login form submitted for email:', email);
+      const { error, success } = await signIn(email, password);
+      
+      if (error) {
+        console.error('Login error:', error);
+        setError(error.message);
+        setIsLoading(false);
+        return;
+      }
+      
+      if (success) {
+        console.log('Login successful, waiting for auth state update...');
+        // Don't redirect here - let the useEffect handle it after auth state updates
+        // The redirect will happen automatically when user state updates
+      }
+    } catch (err: any) {
+      console.error('Login exception:', err);
+      setError(err.message || 'An error occurred during sign in');
       setIsLoading(false);
-      return;
     }
-    
-    if (success) {
-      console.log("Login successful, redirecting to dashboard");
-      router.push('/dashboard');
-    }
-  } catch (err: any) {
-    console.error("Unexpected error during login:", err);
-    setError(err.message || 'An error occurred during sign in');
-    setIsLoading(false);
+  };
+
+  // Show loading if checking auth or user exists (will redirect)
+  if (authLoading || user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-12 h-12 border-4 border-gray-300 rounded-full border-t-indigo-600 animate-spin"></div>
+      </div>
+    );
   }
-};
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
