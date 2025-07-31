@@ -2,7 +2,7 @@
 import { ReactNode, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { useAuth } from '@/lib/auth';
+import { useAuth } from '@/hooks/use-auth';
 import { 
   LayoutDashboard, 
   Image as ImageIcon, 
