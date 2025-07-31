@@ -4,7 +4,7 @@ import { UserMinimal } from "./user.types";
 
 export type Unit = Database["public"]["Tables"]["units"]["Row"];
 
-export type UnitImage = Database["public"]["Tables"]["unit-images"]["Row"];
+export type UnitImage = Database["public"]["Tables"]["unit_images"]["Row"];
 
 export type RewardCategory = 'small_prize' | 'medium_prize' | 'top_prize';
 

@@ -35,7 +35,7 @@ export function useUnitImages(): UseUnitImagesResult {
     
     try {
       const { data, error } = await supabase
-        .from('unit-images')
+        .from('unit_images')
         .select('*')
         .eq('unit_id', unitId);
       
@@ -91,7 +91,7 @@ export function useUnitImages(): UseUnitImagesResult {
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
       const filePath = `units/${unitId}/${category}/${fileName}`;
       
-      // Upload to Supabase Storage
+      // Upload to Supabase Storage (unit-images bucket)
       const { data: uploadData, error: uploadError } = await supabase
         .storage
         .from('unit-images')
@@ -105,9 +105,9 @@ export function useUnitImages(): UseUnitImagesResult {
         .from('unit-images')
         .getPublicUrl(filePath);
       
-      // Check if an image already exists for this category
+      // Check if an image already exists for this category (unit_images table)
       const { data: existingImage } = await supabase
-        .from('unit-images')
+        .from('unit_images')
         .select('id')
         .eq('unit_id', unitId)
         .eq('category', category)
@@ -118,7 +118,7 @@ export function useUnitImages(): UseUnitImagesResult {
       if (existingImage) {
         // Update existing image
         const { data, error: updateError } = await supabase
-          .from('unit-images')
+          .from('unit_images')
           .update({
             image_url: publicUrl,
             updated_by: userId,
@@ -133,7 +133,7 @@ export function useUnitImages(): UseUnitImagesResult {
       } else {
         // Insert new image
         const { data, error: insertError } = await supabase
-          .from('unit-images')
+          .from('unit_images')
           .insert({
             unit_id: unitId,
             category,
@@ -173,7 +173,7 @@ export function useUnitImages(): UseUnitImagesResult {
     try {
       // Get image data first to get the file path
       const { data: imageData, error: fetchError } = await supabase
-        .from('unit-images')
+        .from('unit_images')
         .select('*')
         .eq('id', imageId)
         .single();
@@ -185,7 +185,7 @@ export function useUnitImages(): UseUnitImagesResult {
       const storageUrl = supabase.storage.from('unit-images').getPublicUrl('').data.publicUrl;
       const filePath = imageUrl.replace(storageUrl + '/', '');
       
-      // Delete from storage
+      // Delete from storage (unit-images bucket)
       const { error: storageError } = await supabase
         .storage
         .from('unit-images')
@@ -193,9 +193,9 @@ export function useUnitImages(): UseUnitImagesResult {
       
       if (storageError) throw storageError;
       
-      // Delete from database
+      // Delete from database (unit_images table)
       const { error: dbError } = await supabase
-        .from('unit-images')
+        .from('unit_images')
         .delete()
         .eq('id', imageId);
       

@@ -91,7 +91,7 @@ export async function GET(
           email,
           role
         ),
-        unit-images (
+        unit_images (
           id,
           category,
           image_url,
@@ -111,8 +111,8 @@ export async function GET(
 
     // Transform image data
     const images: Record<string, any> = {};
-    if (unit.unit-images) {
-      unit.unit-images.forEach(image => {
+    if (unit.unit_images) {
+      unit.unit_images.forEach(image => {
         if (image.category) {
           images[image.category] = image;
         }
@@ -255,7 +255,7 @@ export async function DELETE(
     // Delete associated images first
     const supabase = getServiceSupabase();
     const { error: imagesError } = await supabase
-      .from('unit-images')
+      .from('unit_images')
       .delete()
       .eq('unit_id', unitId);
 

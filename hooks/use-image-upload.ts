@@ -108,7 +108,7 @@ export function useImageUpload() {
       // Simulate progress
       setUploadProgress(25);
       
-      // Upload to Supabase Storage
+      // Upload to Supabase Storage (use unit-images bucket)
       const { data, error: uploadError } = await supabase
         .storage
         .from('unit-images')
@@ -127,9 +127,9 @@ export function useImageUpload() {
       setUploadProgress(75);
       setUploadStatus('processing');
       
-      // Check if an image already exists for this category
+      // Check if an image already exists for this category (use unit_images table)
       const { data: existingImage } = await supabase
-        .from('unit-images')
+        .from('unit_images')
         .select('id')
         .eq('unit_id', unitId)
         .eq('category', category)
@@ -140,7 +140,7 @@ export function useImageUpload() {
       if (existingImage) {
         // Update existing image
         const { data, error: updateError } = await supabase
-          .from('unit-images')
+          .from('unit_images')
           .update({
             image_url: publicUrl,
             updated_by: userId,
@@ -155,7 +155,7 @@ export function useImageUpload() {
       } else {
         // Insert new image
         const { data, error: insertError } = await supabase
-          .from('unit-images')
+          .from('unit_images')
           .insert({
             unit_id: unitId,
             category,

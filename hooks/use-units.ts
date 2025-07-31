@@ -82,7 +82,7 @@ export function useUnits() {
       
       // Get unit images
       const { data: imagesData, error: imagesError } = await supabase
-        .from('unit-images')
+        .from('unit_images')
         .select('*')
         .eq('unit_id', unitId);
       
@@ -175,7 +175,7 @@ export function useUnits() {
     }
   }, []);
 
-  // Create a new unit - UPDATED to return the created unit
+  // Create a new unit
   const createUnit = useCallback(async (payload: CreateUnitPayload): Promise<Unit | null> => {
     setIsLoading(true);
     setError(null);
@@ -187,12 +187,12 @@ export function useUnits() {
           name: payload.name,
           assigned_manager_id: payload.assigned_manager_id
         })
-        .select()  // Added to return the created unit
-        .single(); // Added to get single unit instead of array
+        .select()
+        .single();
       
       if (error) throw error;
       
-      return data; // Return the created unit with its ID
+      return data;
     } catch (err: any) {
       setError(err.message);
       return null;
@@ -237,7 +237,7 @@ export function useUnits() {
       // Generate a unique file path
       const filePath = `units/${unitId}/${category}/${Date.now()}_${file.name}`;
       
-      // Upload to Supabase Storage
+      // Upload to Supabase Storage (use unit-images bucket)
       const { data: uploadData, error: uploadError } = await supabase
         .storage
         .from('unit-images')
@@ -251,9 +251,9 @@ export function useUnits() {
         .from('unit-images')
         .getPublicUrl(filePath);
       
-      // Save to database
+      // Save to database (use unit_images table)
       const { error: dbError } = await supabase
-        .from('unit-images')
+        .from('unit_images')
         .upsert({
           unit_id: unitId,
           category,

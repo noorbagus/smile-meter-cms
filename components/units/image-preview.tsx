@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { X, Download, Trash2 } from 'lucide-react';
 import { UnitImage } from '@/types/unit.types';
 import { Button } from '@/components/ui/button';
-import { useUnitImages } from '@/hooks/use-unit-images';
+import { useUnitImages } from '@/hooks/use-unit_images';
 
 interface ImagePreviewProps {
   image: UnitImage;
