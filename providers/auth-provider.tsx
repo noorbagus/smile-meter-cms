@@ -1,7 +1,6 @@
-// providers/auth-provider.tsx
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
@@ -13,7 +12,6 @@ interface UserProfile {
   email: string;
   role: UserRole;
   assigned_units?: string[];
-  name?: string;
 }
 
 interface AuthContextType {
@@ -38,7 +36,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isInitialized, setIsInitialized] = useState(false);
   const router = useRouter();
 
   const fetchUserProfile = useCallback(async (userId: string) => {
@@ -49,10 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('id', userId)
         .single();
       
-      if (error) {
-        console.error('Error fetching user profile:', error);
-        throw error;
-      }
+      if (error) throw error;
       
       const userProfile: UserProfile = {
         id: data.id,
@@ -86,11 +80,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initializeAuth = async () => {
       try {
-        // Get initial session
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
-          console.error('Error getting session:', error);
+          if (mounted) {
+            setIsLoading(false);
+          }
+          return;
         }
 
         if (mounted) {
@@ -101,13 +97,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await fetchUserProfile(session.user.id);
           }
           
-          setIsInitialized(true);
           setIsLoading(false);
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
         if (mounted) {
-          setIsInitialized(true);
           setIsLoading(false);
         }
       }
@@ -115,7 +109,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initializeAuth();
 
-    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
@@ -129,10 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setProfile(null);
         }
         
-        // Only set loading to false after initialization
-        if (isInitialized) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
     );
 
@@ -140,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [fetchUserProfile, isInitialized]);
+  }, [fetchUserProfile]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     try {
@@ -156,7 +146,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error, success: false };
       }
       
-      // Let auth state change handle loading state
       return { error: null, success: true };
     } catch (error: any) {
       setIsLoading(false);
@@ -191,15 +180,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     canAccessUnit,
   };
-
-  // Prevent hydration mismatch by showing loading until initialized
-  if (!isInitialized) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="w-12 h-12 border-4 border-gray-300 rounded-full border-t-indigo-600 animate-spin"></div>
-      </div>
-    );
-  }
 
   return (
     <AuthContext.Provider value={value}>

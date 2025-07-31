@@ -6,8 +6,8 @@ import { AuthContext } from '@/providers/auth-provider';
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
   }
   return context;
 }
@@ -16,18 +16,18 @@ export function useRequireAuth(redirectTo = '/login') {
   const auth = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const redirectAttempted = useRef(false);
+  const hasRedirected = useRef(false);
 
   useEffect(() => {
-    // Only redirect once auth is fully loaded and no user exists
-    if (!auth.isLoading && !auth.user && pathname !== redirectTo && !redirectAttempted.current) {
-      redirectAttempted.current = true;
-      router.push(redirectTo);
+    if (!auth.isLoading && !auth.user && !hasRedirected.current) {
+      if (pathname !== redirectTo) {
+        hasRedirected.current = true;
+        router.push(redirectTo);
+      }
     }
     
-    // Reset redirect flag when user becomes available
     if (auth.user) {
-      redirectAttempted.current = false;
+      hasRedirected.current = false;
     }
   }, [auth.isLoading, auth.user, router, redirectTo, pathname]);
 
@@ -38,28 +38,25 @@ export function useRequireAdmin(redirectTo = '/dashboard') {
   const auth = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const redirectAttempted = useRef(false);
+  const hasRedirected = useRef(false);
 
   useEffect(() => {
-    if (auth.isLoading) return;
-
-    // No user - redirect to login
-    if (!auth.user && pathname !== '/login' && !redirectAttempted.current) {
-      redirectAttempted.current = true;
-      router.push('/login');
-      return;
+    if (!auth.isLoading) {
+      if (!auth.user && !hasRedirected.current) {
+        if (pathname !== '/login') {
+          hasRedirected.current = true;
+          router.push('/login');
+        }
+      } else if (auth.user && !auth.isAdmin && !hasRedirected.current) {
+        if (pathname !== redirectTo) {
+          hasRedirected.current = true;
+          router.push(redirectTo);
+        }
+      }
     }
     
-    // User exists but not admin - redirect to dashboard
-    if (auth.user && !auth.isAdmin && pathname !== redirectTo && !redirectAttempted.current) {
-      redirectAttempted.current = true;
-      router.push(redirectTo);
-      return;
-    }
-    
-    // Reset flag when conditions are met
-    if ((auth.user && auth.isAdmin) || !auth.user) {
-      redirectAttempted.current = false;
+    if (auth.user && auth.isAdmin) {
+      hasRedirected.current = false;
     }
   }, [auth.isLoading, auth.user, auth.isAdmin, router, redirectTo, pathname]);
 
@@ -70,27 +67,26 @@ export function useUnitAccess(unitId: string | undefined, redirectTo = '/dashboa
   const auth = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const redirectAttempted = useRef(false);
-
-  const hasAccess = unitId ? auth.canAccessUnit(unitId) : false;
+  const hasRedirected = useRef(false);
 
   useEffect(() => {
-    if (auth.isLoading || !auth.user || !unitId) return;
-
-    if (!hasAccess && pathname !== redirectTo && !redirectAttempted.current) {
-      redirectAttempted.current = true;
-      router.push(redirectTo);
+    if (!auth.isLoading && auth.user && unitId) {
+      if (!auth.canAccessUnit(unitId) && !hasRedirected.current) {
+        if (pathname !== redirectTo) {
+          hasRedirected.current = true;
+          router.push(redirectTo);
+        }
+      }
     }
     
-    // Reset flag when access is granted
-    if (hasAccess) {
-      redirectAttempted.current = false;
+    if (unitId && auth.canAccessUnit(unitId)) {
+      hasRedirected.current = false;
     }
-  }, [auth.isLoading, auth.user, unitId, hasAccess, router, redirectTo, pathname]);
+  }, [auth.isLoading, auth.user, unitId, auth.canAccessUnit, router, redirectTo, pathname]);
 
   return {
     ...auth,
-    hasAccess
+    hasAccess: unitId ? auth.canAccessUnit(unitId) : false
   };
 }
 

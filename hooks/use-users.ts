@@ -1,4 +1,3 @@
-// hooks/use-users.ts
 'use client';
 
 import { useState, useCallback } from 'react';
@@ -107,7 +106,7 @@ export function useUsers() {
     setError(null);
     
     try {
-      // Update auth user if password is provided
+      // Update password if provided
       if (userData.password) {
         // Note: In a real implementation, you would need admin privileges to update password
         // This is just a simplified version

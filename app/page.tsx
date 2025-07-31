@@ -1,21 +1,42 @@
 // app/page.tsx
-import { redirect } from 'next/navigation'
-import { supabase, getServiceSupabase } from '@/lib/supabase'
+'use client';
 
-export default async function HomePage() {
-  const supabase = await createClient()
-  
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/hooks/use-auth';
 
-  // Redirect based on authentication status
-  if (user) {
-    redirect('/dashboard')
-  } else {
-    redirect('/login')
-  }
+export default function HomePage() {
+  const router = useRouter();
+  const { user, profile, isLoading } = useAuth();
 
-  // This will never be rendered
-  return null
+  useEffect(() => {
+    if (isLoading) return;
+
+    if (user && profile) {
+      router.replace('/dashboard');
+    } else {
+      router.replace('/login');
+    }
+  }, [isLoading, user, profile, router]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <div className="flex justify-center mb-4">
+          <div className="h-12 w-12 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold">
+            SM
+          </div>
+        </div>
+        <h1 className="text-3xl font-extrabold text-gray-900 mb-2">
+          Smile Meter CMS
+        </h1>
+        <div className="flex items-center justify-center space-x-2">
+          <div className="w-6 h-6 border-2 border-gray-300 rounded-full border-t-indigo-600 animate-spin"></div>
+          <p className="text-sm text-gray-600">
+            {isLoading ? 'Initializing...' : 'Redirecting...'}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
