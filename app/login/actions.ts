@@ -1,67 +1,70 @@
-// app/login/actions.ts
-'use server'
+'use server';
 
-import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
-import { createClient } from '@/utils/supabase/server'
+import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 export async function login(formData: FormData) {
-  const supabase = await createClient()
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
 
-  const data = {
-    email: formData.get('email') as string,
-    password: formData.get('password') as string,
-  }
-
-  const { error } = await supabase.auth.signInWithPassword(data)
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
 
   if (error) {
-    return { success: false, error: error.message }
+    redirect('/error');
   }
 
-  revalidatePath('/', 'layout')
-  redirect('/dashboard')
+  revalidatePath('/', 'layout');
+  redirect('/dashboard');
 }
 
 export async function signup(formData: FormData) {
-  const supabase = await createClient()
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
 
-  const data = {
-    email: formData.get('email') as string,
-    password: formData.get('password') as string,
-    role: formData.get('role') as string || 'store_manager',
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+  });
+
+  if (error) {
+    redirect('/error');
   }
 
-  const { error: signUpError, data: authData } = await supabase.auth.signUp(data)
-
-  if (signUpError) {
-    return { success: false, error: signUpError.message }
-  }
-
-  // Create user profile if signup successful
-  if (authData.user) {
-    const { error: profileError } = await supabase
-      .from('users')
-      .insert({
-        id: authData.user.id,
-        email: authData.user.email!,
-        role: data.role,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-
-    if (profileError) {
-      return { success: false, error: profileError.message }
-    }
-  }
-
-  revalidatePath('/', 'layout')
-  return { success: true, message: 'Account created successfully' }
+  revalidatePath('/', 'layout');
+  redirect('/dashboard');
 }
 
 export async function signOut() {
-  const supabase = await createClient()
-  await supabase.auth.signOut()
-  revalidatePath('/', 'layout')
-  redirect('/login')
+  const { error } = await supabase.auth.signOut();
+
+  if (error) {
+    redirect('/error');
+  }
+
+  revalidatePath('/', 'layout');
+  redirect('/login');
+}
+
+export async function getUser() {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+}
+
+export async function getUserProfile(userId: string) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', userId)
+    .single();
+
+  if (error) {
+    console.error('Error fetching user profile:', error);
+    return null;
+  }
+
+  return data;
 }
