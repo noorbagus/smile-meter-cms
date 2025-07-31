@@ -13,28 +13,34 @@ export default function LoginPage() {
   const { signIn } = useAuth();
   const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setIsLoading(true);
+// app/login/page.tsx
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  console.log("Login form submitted for email:", email);
+  setError(null);
+  setIsLoading(true);
 
-    try {
-      const { error, success } = await signIn(email, password);
-      
-      if (error) {
-        setError(error.message);
-        setIsLoading(false);
-        return;
-      }
-      
-      if (success) {
-        router.push('/dashboard');
-      }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred during sign in');
+  try {
+    console.log("Calling signIn function");
+    const { error, success } = await signIn(email, password);
+    
+    if (error) {
+      console.error("Login error returned:", error);
+      setError(error.message);
       setIsLoading(false);
+      return;
     }
-  };
+    
+    if (success) {
+      console.log("Login successful, redirecting to dashboard");
+      router.push('/dashboard');
+    }
+  } catch (err: any) {
+    console.error("Unexpected error during login:", err);
+    setError(err.message || 'An error occurred during sign in');
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">

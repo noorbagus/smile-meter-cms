@@ -39,41 +39,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  const fetchUserProfile = useCallback(async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, email, role')
-        .eq('id', userId)
-        .single();
-      
-      if (error) throw error;
-      
-      const userProfile: UserProfile = {
-        id: data.id,
-        email: data.email,
-        role: data.role as UserRole,
-        assigned_units: []
-      };
-      
-      if (data.role === 'store_manager') {
-        const { data: unitsData, error: unitsError } = await supabase
-          .from('units')
-          .select('id')
-          .eq('assigned_manager_id', userId);
-        
-        if (!unitsError && unitsData) {
-          userProfile.assigned_units = unitsData.map(unit => unit.id);
-        }
-      }
-      
-      setProfile(userProfile);
-    } catch (error) {
-      console.error('Error fetching user profile:', error);
-    } finally {
-      setIsLoading(false);
+// providers/auth-provider.tsx
+const fetchUserProfile = useCallback(async (userId: string) => {
+  console.log("Fetching user profile for ID:", userId);
+  try {
+    console.log("Querying users table...");
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, email, role')
+      .eq('id', userId)
+      .single();
+    
+    if (error) {
+      console.error("Error fetching from users table:", error);
+      throw error;
     }
-  }, []);
+    
+    console.log("User profile data retrieved:", data);
+    
+    const userProfile: UserProfile = {
+      id: data.id,
+      email: data.email,
+      role: data.role as UserRole,
+      assigned_units: []
+    };
+    
+    if (data.role === 'store_manager') {
+      console.log("Fetching assigned units for store manager");
+      const { data: unitsData, error: unitsError } = await supabase
+        .from('units')
+        .select('id')
+        .eq('assigned_manager_id', userId);
+      
+      if (unitsError) {
+        console.error("Error fetching assigned units:", unitsError);
+      } else {
+        console.log("Assigned units:", unitsData);
+        userProfile.assigned_units = unitsData.map(unit => unit.id);
+      }
+    }
+    
+    console.log("Setting profile state:", userProfile);
+    setProfile(userProfile);
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+  } finally {
+    setIsLoading(false);
+  }
+}, []);
 
   useEffect(() => {
     const getInitialSession = async () => {
@@ -109,20 +122,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [fetchUserProfile]);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+// hooks/use-auth.ts
+const signIn = useCallback(async (email: string, password: string) => {
+  console.log("Starting sign in process for email:", email);
+  try {
+    console.log("Calling supabase.auth.signInWithPassword");
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-      if (error) throw error;
-      
-      return { error: null, success: true };
-    } catch (error: any) {
-      return { error, success: false };
+    if (error) {
+      console.error("Authentication error:", error);
+      throw error;
     }
-  }, []);
+    
+    console.log("Authentication successful, user:", data.user?.id);
+    return { error: null, success: true };
+  } catch (error: any) {
+    console.error("Sign in failed:", error);
+    return { error, success: false };
+  }
+}, []);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
