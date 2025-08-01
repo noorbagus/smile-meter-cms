@@ -1,31 +1,20 @@
+// app/units/layout.tsx
 'use client';
 
-import { useState } from 'react';
-import { useRequireAuth } from '@/hooks/use-auth';
-import Breadcrumb from '@/components/layout/breadcrumb';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePathname } from 'next/navigation';
+import Breadcrumb from '@/components/layout/breadcrumb';
 
 export default function UnitsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { isLoading } = useRequireAuth();
   const pathname = usePathname();
-  const isUnitDetail = pathname !== '/units';
+  const isUnitDetail = pathname?.includes('/units/') && pathname !== '/units';
 
-  if (isLoading) {
-    return (
-      <div className="p-4 sm:p-6 lg:p-8">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-          <div className="bg-gray-100 p-6 rounded-xl h-64"></div>
-        </div>
-      </div>
-    );
-  }
-
+  // AuthProvider + ClientLayout sudah handle auth protection
+  // Layout ini hanya untuk UI structure dan breadcrumb
+  
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       {/* Breadcrumb */}

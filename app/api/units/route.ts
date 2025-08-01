@@ -1,9 +1,24 @@
 // app/api/units/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getServiceSupabase } from '@/lib/supabase';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
-async function validateSession() {
-  const supabase = getServiceSupabase();
+// Consistent server-side auth validation
+async function validateServerSession() {
+  const cookieStore = cookies();
+  
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+      },
+    }
+  );
+
   const { data: { session }, error } = await supabase.auth.getSession();
   
   if (error || !session) {
@@ -20,22 +35,27 @@ async function validateSession() {
     return { error: userError.message, status: 500 };
   }
   
-  return { session, userId: session.user.id, role: userData.role };
+  return { 
+    session, 
+    userId: session.user.id, 
+    role: userData.role,
+    supabase 
+  };
 }
 
 // GET /api/units - Get all units with optional filtering
 export async function GET(request: NextRequest) {
   try {
-    // Validate session
-    const sessionResult = await validateSession();
-    if ('error' in sessionResult) {
+    // Use consistent server auth validation
+    const authResult = await validateServerSession();
+    if ('error' in authResult) {
       return NextResponse.json(
-        { error: sessionResult.error },
-        { status: sessionResult.status }
+        { error: authResult.error },
+        { status: authResult.status }
       );
     }
     
-    const { userId, role } = sessionResult;
+    const { userId, role, supabase } = authResult;
     
     // Get query parameters
     const url = new URL(request.url);
@@ -43,7 +63,6 @@ export async function GET(request: NextRequest) {
     const managerId = url.searchParams.get('managerId');
 
     // Build query based on user role
-    const supabase = getServiceSupabase();
     let query = supabase.from('units').select(`
       id,
       name,
@@ -81,7 +100,7 @@ export async function GET(request: NextRequest) {
       assigned_manager_id: unit.assigned_manager_id,
       created_at: unit.created_at,
       updated_at: unit.updated_at,
-      manager_name: unit.users?.email || null
+      manager_name: (unit.users as any)?.email || null
     }));
 
     return NextResponse.json(transformedData);
@@ -96,16 +115,16 @@ export async function GET(request: NextRequest) {
 // POST /api/units - Create a new unit
 export async function POST(request: NextRequest) {
   try {
-    // Validate session
-    const sessionResult = await validateSession();
-    if ('error' in sessionResult) {
+    // Use consistent server auth validation
+    const authResult = await validateServerSession();
+    if ('error' in authResult) {
       return NextResponse.json(
-        { error: sessionResult.error },
-        { status: sessionResult.status }
+        { error: authResult.error },
+        { status: authResult.status }
       );
     }
     
-    const { role } = sessionResult;
+    const { role, supabase } = authResult;
 
     // Only admins can create units
     if (role !== 'admin') {
@@ -126,7 +145,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Create unit
-    const supabase = getServiceSupabase();
     const { data, error } = await supabase
       .from('units')
       .insert({

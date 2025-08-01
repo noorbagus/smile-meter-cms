@@ -1,12 +1,74 @@
 // app/api/users/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getServiceSupabase } from '@/lib/supabase';
-import { UserMinimal } from '@/types/user.types';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
+
+// Consistent server-side auth validation
+async function validateServerSession() {
+  const cookieStore = cookies();
+  
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+      },
+    }
+  );
+
+  const { data: { session }, error } = await supabase.auth.getSession();
+  
+  if (error || !session) {
+    return { error: 'Unauthorized', status: 401 };
+  }
+  
+  const { data: userData, error: userError } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', session.user.id)
+    .single();
+    
+  if (userError) {
+    return { error: userError.message, status: 500 };
+  }
+  
+  return { 
+    session, 
+    userId: session.user.id, 
+    role: userData.role,
+    supabase 
+  };
+}
+
+async function validateAdminAccess(authResult: any) {
+  if ('error' in authResult) {
+    return authResult;
+  }
+  
+  if (authResult.role !== 'admin') {
+    return { error: 'Admin privileges required', status: 403 };
+  }
+  
+  return authResult;
+}
 
 // GET /api/users - Get all users
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getServiceSupabase();
+    // Use consistent server auth validation
+    const authResult = await validateServerSession();
+    const adminCheck = await validateAdminAccess(authResult);
+    if ('error' in adminCheck) {
+      return NextResponse.json(
+        { error: adminCheck.error },
+        { status: adminCheck.status }
+      );
+    }
+    
+    const { supabase } = adminCheck;
     
     // Get query parameters
     const url = new URL(request.url);
@@ -43,7 +105,17 @@ export async function GET(request: NextRequest) {
 // POST /api/users - Create a new user
 export async function POST(request: NextRequest) {
   try {
-    const supabase = getServiceSupabase();
+    // Use consistent server auth validation
+    const authResult = await validateServerSession();
+    const adminCheck = await validateAdminAccess(authResult);
+    if ('error' in adminCheck) {
+      return NextResponse.json(
+        { error: adminCheck.error },
+        { status: adminCheck.status }
+      );
+    }
+    
+    const { supabase } = adminCheck;
     const body = await request.json();
     
     // Validate required fields

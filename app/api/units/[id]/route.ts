@@ -1,37 +1,51 @@
 // app/api/units/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getServiceSupabase } from '@/lib/supabase';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
-async function validateSession() {
-  const supabase = getServiceSupabase();
+// Consistent server-side auth validation
+async function validateServerSession() {
+  const cookieStore = cookies();
+  
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+      },
+    }
+  );
+
   const { data: { session }, error } = await supabase.auth.getSession();
   
   if (error || !session) {
     return { error: 'Unauthorized', status: 401 };
   }
   
-  return { session, userId: session.user.id };
-}
-
-async function getUserRole(userId: string) {
-  const supabase = getServiceSupabase();
-  const { data, error } = await supabase
+  const { data: userData, error: userError } = await supabase
     .from('users')
     .select('role')
-    .eq('id', userId)
+    .eq('id', session.user.id)
     .single();
     
-  if (error) {
-    return { error: error.message, status: 500 };
+  if (userError) {
+    return { error: userError.message, status: 500 };
   }
   
-  return { role: data.role };
+  return { 
+    session, 
+    userId: session.user.id, 
+    role: userData.role,
+    supabase 
+  };
 }
 
-async function checkUnitAccess(unitId: string, userId: string, userRole: string) {
+async function checkUnitAccess(supabase: any, unitId: string, userId: string, userRole: string) {
   if (userRole === 'admin') return true;
   
-  const supabase = getServiceSupabase();
   const { data } = await supabase
     .from('units')
     .select('assigned_manager_id')
@@ -49,30 +63,19 @@ export async function GET(
   try {
     const unitId = params.id;
     
-    // Validate session
-    const sessionResult = await validateSession();
-    if ('error' in sessionResult) {
+    // Use consistent server auth validation
+    const authResult = await validateServerSession();
+    if ('error' in authResult) {
       return NextResponse.json(
-        { error: sessionResult.error },
-        { status: sessionResult.status }
+        { error: authResult.error },
+        { status: authResult.status }
       );
     }
     
-    const { userId } = sessionResult;
-    
-    // Get user role
-    const roleResult = await getUserRole(userId);
-    if ('error' in roleResult) {
-      return NextResponse.json(
-        { error: roleResult.error },
-        { status: roleResult.status }
-      );
-    }
-    
-    const { role } = roleResult;
+    const { userId, role, supabase } = authResult;
     
     // Check unit access
-    const hasAccess = await checkUnitAccess(unitId, userId, role);
+    const hasAccess = await checkUnitAccess(supabase, unitId, userId, role);
     if (!hasAccess) {
       return NextResponse.json(
         { error: 'You do not have permission to access this unit' },
@@ -81,7 +84,6 @@ export async function GET(
     }
 
     // Get unit with images and manager info
-    const supabase = getServiceSupabase();
     const { data: unit, error } = await supabase
       .from('units')
       .select(`
@@ -112,7 +114,7 @@ export async function GET(
     // Transform image data
     const images: Record<string, any> = {};
     if (unit.unit_images) {
-      unit.unit_images.forEach(image => {
+      unit.unit_images.forEach((image: any) => {
         if (image.category) {
           images[image.category] = image;
         }
@@ -123,7 +125,7 @@ export async function GET(
     const formattedUnit = {
       ...unit,
       images,
-      manager: unit.users,
+      manager: (unit.users as any),
       status: 'active',
       users: undefined
     };
@@ -145,30 +147,19 @@ export async function PUT(
   try {
     const unitId = params.id;
     
-    // Validate session
-    const sessionResult = await validateSession();
-    if ('error' in sessionResult) {
+    // Use consistent server auth validation
+    const authResult = await validateServerSession();
+    if ('error' in authResult) {
       return NextResponse.json(
-        { error: sessionResult.error },
-        { status: sessionResult.status }
+        { error: authResult.error },
+        { status: authResult.status }
       );
     }
     
-    const { userId } = sessionResult;
-    
-    // Get user role
-    const roleResult = await getUserRole(userId);
-    if ('error' in roleResult) {
-      return NextResponse.json(
-        { error: roleResult.error },
-        { status: roleResult.status }
-      );
-    }
-    
-    const { role } = roleResult;
+    const { userId, role, supabase } = authResult;
     
     // Check unit access
-    const hasAccess = await checkUnitAccess(unitId, userId, role);
+    const hasAccess = await checkUnitAccess(supabase, unitId, userId, role);
     if (!hasAccess) {
       return NextResponse.json(
         { error: 'You do not have permission to update this unit' },
@@ -190,7 +181,6 @@ export async function PUT(
     }
 
     // Update unit
-    const supabase = getServiceSupabase();
     const { data, error } = await supabase
       .from('units')
       .update(updateData)
@@ -222,27 +212,16 @@ export async function DELETE(
   try {
     const unitId = params.id;
     
-    // Validate session
-    const sessionResult = await validateSession();
-    if ('error' in sessionResult) {
+    // Use consistent server auth validation
+    const authResult = await validateServerSession();
+    if ('error' in authResult) {
       return NextResponse.json(
-        { error: sessionResult.error },
-        { status: sessionResult.status }
+        { error: authResult.error },
+        { status: authResult.status }
       );
     }
     
-    const { userId } = sessionResult;
-    
-    // Get user role
-    const roleResult = await getUserRole(userId);
-    if ('error' in roleResult) {
-      return NextResponse.json(
-        { error: roleResult.error },
-        { status: roleResult.status }
-      );
-    }
-    
-    const { role } = roleResult;
+    const { role, supabase } = authResult;
 
     // Only admins can delete units
     if (role !== 'admin') {
@@ -253,7 +232,6 @@ export async function DELETE(
     }
 
     // Delete associated images first
-    const supabase = getServiceSupabase();
     const { error: imagesError } = await supabase
       .from('unit_images')
       .delete()

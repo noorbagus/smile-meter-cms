@@ -1,8 +1,9 @@
-// File: app/login/page.tsx
+// app/login/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
+import { useRouter } from 'next/navigation';
 import { AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
@@ -10,7 +11,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { signIn, isLoading } = useAuth();
+  const { signIn, user, isLoading } = useAuth();
+  const router = useRouter();
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (!isLoading && user) {
+      router.replace('/dashboard');
+    }
+  }, [user, isLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,33 +34,29 @@ export default function LoginPage() {
       
       if (error) {
         setError(error.message);
-        setIsSubmitting(false);
-        return;
       }
-      
-      // AuthProvider will handle redirect on success
-      if (success) {
-        console.log('[LOGIN] Sign in successful, AuthProvider will handle redirect');
-      }
+      // Don't handle success here - let AuthProvider handle redirect
     } catch (err: any) {
       setError(err.message || 'An error occurred during sign in');
+    } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Show loading while AuthProvider initializes
-  if (isLoading) {
+  // Show loading while checking auth or if already authenticated
+  if (isLoading || user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-gray-300 rounded-full border-t-indigo-600 animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <p className="mt-4 text-gray-600">
+            {user ? 'Redirecting...' : 'Loading...'}
+          </p>
         </div>
       </div>
     );
   }
 
-  // Render login form - AuthProvider handles authenticated state redirects
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -83,9 +88,6 @@ export default function LoginPage() {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
-              <label htmlFor="email-address" className="sr-only">
-                Email address
-              </label>
               <input
                 id="email-address"
                 name="email"
@@ -100,9 +102,6 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
               <input
                 id="password"
                 name="password"

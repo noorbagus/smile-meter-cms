@@ -1,3 +1,4 @@
+// components/dashboard/dashboard-overview.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -8,6 +9,7 @@ import RecentActivity from '@/components/dashboard/recent-activity';
 import QuickActions from '@/components/dashboard/quick-actions';
 import { UnitListItem } from '@/types/unit.types';
 import { useUnits } from '@/hooks/use-units';
+import { useAuth } from '@/hooks/use-auth';
 
 export interface DashboardStats {
   totalUnits: number;
@@ -29,10 +31,15 @@ export default function DashboardOverview() {
   });
   const [units, setUnits] = useState<UnitListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
   const { getUnits, error } = useUnits();
+  const { user } = useAuth(); // Use centralized auth state
   
   useEffect(() => {
     const fetchData = async () => {
+      // AuthProvider + ClientLayout sudah ensure user exists
+      if (!user) return;
+      
       try {
         const unitsData = await getUnits();
         setUnits(unitsData);
@@ -51,7 +58,10 @@ export default function DashboardOverview() {
     };
     
     fetchData();
-  }, [getUnits]);
+  }, [getUnits, user]);
+  
+  // No need for auth loading check - AuthProvider handles it
+  if (!user) return null;
   
   if (isLoading) {
     return (
@@ -106,7 +116,7 @@ export default function DashboardOverview() {
 
       {/* Units Overview */}
       <div className="mb-8">
-        <UnitsTable units={units} isLoading={isLoading} />
+        <UnitsTable units={units} isLoading={false} />
       </div>
 
       {/* Bottom Section */}

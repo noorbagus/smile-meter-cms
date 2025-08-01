@@ -4,9 +4,10 @@
 import { useAuth } from '@/hooks/use-auth';
 
 export default function HomePage() {
-  const { isLoading } = useAuth();
+  const { user } = useAuth();
 
-  // Show loading while AuthProvider handles auth state and redirects
+  // AuthProvider + ClientLayout akan handle semua redirect logic
+  // Ini hanya fallback UI selama proses redirect
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
@@ -18,12 +19,9 @@ export default function HomePage() {
         <h1 className="text-3xl font-extrabold text-gray-900 mb-2">
           Smile Meter CMS
         </h1>
-        <div className="flex items-center justify-center space-x-2">
-          <div className="w-6 h-6 border-2 border-gray-300 rounded-full border-t-indigo-600 animate-spin"></div>
-          <p className="text-sm text-gray-600">
-            {isLoading ? 'Loading...' : 'Redirecting...'}
-          </p>
-        </div>
+        <p className="text-sm text-gray-600">
+          {user ? 'Redirecting to dashboard...' : 'Loading...'}
+        </p>
       </div>
     </div>
   );

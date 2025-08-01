@@ -1,16 +1,30 @@
 // app/api/users/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getServiceSupabase } from '@/lib/supabase';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
-async function validateAdminSession() {
-  const supabase = getServiceSupabase();
+// Consistent server-side auth validation
+async function validateServerSession() {
+  const cookieStore = cookies();
+  
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+      },
+    }
+  );
+
   const { data: { session }, error } = await supabase.auth.getSession();
   
   if (error || !session) {
     return { error: 'Unauthorized', status: 401 };
   }
   
-  // Check if user is admin
   const { data: userData, error: userError } = await supabase
     .from('users')
     .select('role')
@@ -21,11 +35,24 @@ async function validateAdminSession() {
     return { error: userError.message, status: 500 };
   }
   
-  if (userData.role !== 'admin') {
+  return { 
+    session, 
+    userId: session.user.id, 
+    role: userData.role,
+    supabase 
+  };
+}
+
+async function validateAdminAccess(authResult: any) {
+  if ('error' in authResult) {
+    return authResult;
+  }
+  
+  if (authResult.role !== 'admin') {
     return { error: 'Admin privileges required', status: 403 };
   }
   
-  return { session, userId: session.user.id };
+  return authResult;
 }
 
 // GET /api/users/[id] - Get a single user
@@ -36,16 +63,17 @@ export async function GET(
   try {
     const userId = params.id;
     
-    // Validate admin session
-    const sessionResult = await validateAdminSession();
-    if ('error' in sessionResult) {
+    // Use consistent server auth validation
+    const authResult = await validateServerSession();
+    const adminCheck = await validateAdminAccess(authResult);
+    if ('error' in adminCheck) {
       return NextResponse.json(
-        { error: sessionResult.error },
-        { status: sessionResult.status }
+        { error: adminCheck.error },
+        { status: adminCheck.status }
       );
     }
     
-    const supabase = getServiceSupabase();
+    const { supabase } = adminCheck;
     const { data, error } = await supabase
       .from('users')
       .select('id, email, role')
@@ -76,16 +104,17 @@ export async function PUT(
   try {
     const userId = params.id;
     
-    // Validate admin session
-    const sessionResult = await validateAdminSession();
-    if ('error' in sessionResult) {
+    // Use consistent server auth validation
+    const authResult = await validateServerSession();
+    const adminCheck = await validateAdminAccess(authResult);
+    if ('error' in adminCheck) {
       return NextResponse.json(
-        { error: sessionResult.error },
-        { status: sessionResult.status }
+        { error: adminCheck.error },
+        { status: adminCheck.status }
       );
     }
     
-    const supabase = getServiceSupabase();
+    const { supabase } = adminCheck;
     const body = await request.json();
     
     // Update password if provided
@@ -157,16 +186,17 @@ export async function DELETE(
   try {
     const userId = params.id;
     
-    // Validate admin session
-    const sessionResult = await validateAdminSession();
-    if ('error' in sessionResult) {
+    // Use consistent server auth validation
+    const authResult = await validateServerSession();
+    const adminCheck = await validateAdminAccess(authResult);
+    if ('error' in adminCheck) {
       return NextResponse.json(
-        { error: sessionResult.error },
-        { status: sessionResult.status }
+        { error: adminCheck.error },
+        { status: adminCheck.status }
       );
     }
     
-    const supabase = getServiceSupabase();
+    const { supabase } = adminCheck;
     
     // Delete the auth user first
     const { error: authError } = await supabase.auth.admin.deleteUser(userId);

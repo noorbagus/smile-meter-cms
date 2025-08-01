@@ -5,7 +5,6 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const token_hash = searchParams.get('token_hash');
   const type = searchParams.get('type');
-  const next = searchParams.get('next') ?? '/dashboard';
 
   if (token_hash && type) {
     const { error } = await supabase.auth.verifyOtp({
@@ -14,11 +13,12 @@ export async function GET(request: NextRequest) {
     });
 
     if (!error) {
-      // Redirect to the dashboard or specified next URL
-      return NextResponse.redirect(new URL(next, request.url));
+      // JANGAN redirect manual - biarkan AuthProvider handle
+      // Redirect ke halaman netral yang akan di-handle AuthProvider
+      return NextResponse.redirect(new URL('/', request.url));
     }
   }
 
-  // Redirect to error page if verification fails
-  return NextResponse.redirect(new URL('/auth/auth-code-error', request.url));
+  // Redirect ke error page jika verification gagal
+  return NextResponse.redirect(new URL('/login?error=verification_failed', request.url));
 }

@@ -1,4 +1,5 @@
-// File: hooks/use-auth.ts
+// hooks/use-auth.ts
+'use client';
 
 import { useContext, useCallback } from 'react';
 import { AuthContext } from '@/providers/auth-provider';
@@ -12,14 +13,28 @@ export function useAuth() {
 }
 
 // Simplified hooks - no redirect logic, state-only
+// AuthProvider + ClientLayout handle all redirects
 export function useRequireAuth() {
   const auth = useAuth();
-  return auth;
+  
+  // Return auth state - let components decide what to do
+  // AuthProvider already handles redirect to login
+  return {
+    ...auth,
+    isAuthenticated: !!auth.user
+  };
 }
 
 export function useRequireAdmin() {
   const auth = useAuth();
-  return auth;
+  
+  // Return auth state - let components decide what to do  
+  // AuthProvider already handles basic auth redirect
+  return {
+    ...auth,
+    isAuthenticated: !!auth.user,
+    hasAdminAccess: auth.isAdmin
+  };
 }
 
 export function useUnitAccess(unitId: string | undefined) {
@@ -27,7 +42,8 @@ export function useUnitAccess(unitId: string | undefined) {
 
   return {
     ...auth,
-    hasAccess: unitId ? auth.canAccessUnit(unitId) : false
+    hasAccess: unitId ? auth.canAccessUnit(unitId) : false,
+    isAuthenticated: !!auth.user
   };
 }
 
@@ -51,6 +67,7 @@ export function useFeatureAccess(feature: 'user_management' | 'analytics' | 'sch
   
   return {
     ...auth,
-    canAccess: canAccess()
+    canAccess: canAccess(),
+    isAuthenticated: !!auth.user
   };
 }

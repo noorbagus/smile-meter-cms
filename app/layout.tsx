@@ -1,9 +1,15 @@
-// File: app/layout.tsx
+// app/layout.tsx
 import './globals.css';
 import { Inter } from 'next/font/google';
 import { AuthProvider } from '@/providers/auth-provider';
+import ClientLayout from '@/components/layout/client-layout';
 
 const inter = Inter({ subsets: ['latin'] });
+
+export const metadata = {
+  title: 'Smile Meter CMS',
+  description: 'Content Management System for Smile Meter AR Application',
+};
 
 export default function RootLayout({
   children,
@@ -14,9 +20,9 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className} suppressHydrationWarning>
         <AuthProvider>
-          <div id="root">
+          <ClientLayout>
             {children}
-          </div>
+          </ClientLayout>
         </AuthProvider>
       </body>
     </html>
