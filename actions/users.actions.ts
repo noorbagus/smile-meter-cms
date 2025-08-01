@@ -1,221 +1,44 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getServiceSupabase } from '@/lib/supabase';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 import { UserMinimal } from '@/types/user.types';
 
-interface CreateUserData {
-  email: string;
-  password: string;
-  role: string;
-}
-
-interface UpdateUserData {
-  email?: string;
-  password?: string;
-  role?: string;
-}
-
-async function validateAdminSession() {
-  const supabase = getServiceSupabase();
-  const { data: { session }, error } = await supabase.auth.getSession();
+/**
+ * Get server-side Supabase client with cookies
+ */
+function getServerSupabase() {
+  const cookieStore = cookies();
   
-  if (error || !session) {
-    return { success: false, error: 'Authentication required' };
-  }
-  
-  const { data: userData, error: userError } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', session.user.id)
-    .single();
-    
-  if (userError) {
-    return { success: false, error: userError.message };
-  }
-  
-  if (userData.role !== 'admin') {
-    return { success: false, error: 'Admin privileges required' };
-  }
-  
-  return { success: true, session, userId: session.user.id };
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options: any) {
+          cookieStore.set({ name, value, ...options });
+        },
+        remove(name: string, options: any) {
+          cookieStore.set({ name, value: '', ...options });
+        },
+      },
+    }
+  );
 }
 
-export async function createUser(userData: CreateUserData): Promise<{ success: boolean; data?: UserMinimal; error?: string }> {
-  try {
-    const sessionResult = await validateAdminSession();
-    if (!sessionResult.success) {
-      return sessionResult;
-    }
-
-    const supabase = getServiceSupabase();
-    
-    // Create the auth user
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: userData.email,
-      password: userData.password,
-      email_confirm: true,
-    });
-    
-    if (authError) {
-      return { success: false, error: authError.message };
-    }
-    
-    if (!authData.user) {
-      return { success: false, error: 'Failed to create user' };
-    }
-    
-    // Create the user profile
-    const { data, error } = await supabase
-      .from('users')
-      .insert({
-        id: authData.user.id,
-        email: userData.email,
-        role: userData.role,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-    
-    if (error) {
-      // Rollback auth user creation if profile creation fails
-      await supabase.auth.admin.deleteUser(authData.user.id);
-      return { success: false, error: error.message };
-    }
-    
-    revalidatePath('/users');
-    return { success: true, data: data as UserMinimal };
-  } catch (error: any) {
-    return { success: false, error: error.message || 'An unexpected error occurred' };
-  }
-}
-
-export async function updateUser(userId: string, userData: UpdateUserData): Promise<{ success: boolean; data?: UserMinimal; error?: string }> {
-  try {
-    const sessionResult = await validateAdminSession();
-    if (!sessionResult.success) {
-      return sessionResult;
-    }
-
-    const supabase = getServiceSupabase();
-    
-    // Update password if provided
-    if (userData.password) {
-      const { error: authError } = await supabase.auth.admin.updateUserById(
-        userId, 
-        { password: userData.password }
-      );
-      
-      if (authError) {
-        return { success: false, error: authError.message };
-      }
-    }
-    
-    // Update email if provided
-    if (userData.email) {
-      const { error: authError } = await supabase.auth.admin.updateUserById(
-        userId, 
-        { email: userData.email }
-      );
-      
-      if (authError) {
-        return { success: false, error: authError.message };
-      }
-    }
-    
-    // Update user profile
-    const updateData: any = {};
-    
-    if (userData.email) updateData.email = userData.email;
-    if (userData.role) updateData.role = userData.role;
-    updateData.updated_at = new Date().toISOString();
-    
-    const { data, error } = await supabase
-      .from('users')
-      .update(updateData)
-      .eq('id', userId)
-      .select()
-      .single();
-    
-    if (error) {
-      return { success: false, error: error.message };
-    }
-    
-    revalidatePath('/users');
-    revalidatePath(`/users/${userId}`);
-    return { success: true, data: data as UserMinimal };
-  } catch (error: any) {
-    return { success: false, error: error.message || 'An unexpected error occurred' };
-  }
-}
-
-export async function deleteUser(userId: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    const sessionResult = await validateAdminSession();
-    if (!sessionResult.success) {
-      return sessionResult;
-    }
-
-    const supabase = getServiceSupabase();
-    
-    // Delete the auth user first
-    const { error: authError } = await supabase.auth.admin.deleteUser(userId);
-    
-    if (authError) {
-      return { success: false, error: authError.message };
-    }
-    
-    // Delete the user profile
-    const { error } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', userId);
-    
-    if (error) {
-      return { success: false, error: error.message };
-    }
-    
-    revalidatePath('/users');
-    return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message || 'An unexpected error occurred' };
-  }
-}
-
-export async function getUserById(userId: string): Promise<{ success: boolean; data?: UserMinimal; error?: string }> {
-  try {
-    const sessionResult = await validateAdminSession();
-    if (!sessionResult.success) {
-      return sessionResult;
-    }
-
-    const supabase = getServiceSupabase();
-    
-    const { data, error } = await supabase
-      .from('users')
-      .select('id, email, role')
-      .eq('id', userId)
-      .single();
-    
-    if (error) {
-      return { success: false, error: error.message };
-    }
-    
-    return { success: true, data: data as UserMinimal };
-  } catch (error: any) {
-    return { success: false, error: error.message || 'An unexpected error occurred' };
-  }
-}
-
+// Get users (basic read operation)
 export async function getUsers(role?: string): Promise<{ success: boolean; data?: UserMinimal[]; error?: string }> {
   try {
-    const sessionResult = await validateAdminSession();
-    if (!sessionResult.success) {
-      return sessionResult;
+    const supabase = getServerSupabase();
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      return { success: false, error: 'Authentication required' };
     }
-
-    const supabase = getServiceSupabase();
     
     let query = supabase
       .from('users')
@@ -236,3 +59,38 @@ export async function getUsers(role?: string): Promise<{ success: boolean; data?
     return { success: false, error: error.message || 'An unexpected error occurred' };
   }
 }
+
+// Get user by ID (basic read operation)
+export async function getUserById(userId: string): Promise<{ success: boolean; data?: UserMinimal; error?: string }> {
+  try {
+    const supabase = getServerSupabase();
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      return { success: false, error: 'Authentication required' };
+    }
+    
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, email, role')
+      .eq('id', userId)
+      .single();
+    
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    
+    return { success: true, data: data as UserMinimal };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'An unexpected error occurred' };
+  }
+}
+
+// REMOVED: Admin-only operations that caused validation conflicts
+// - validateAdminSession()
+// - createUser() 
+// - updateUser()
+// - deleteUser()
+//
+// These functions should be handled by API routes with proper service role keys
+// This eliminates server action auth conflicts with AuthProvider

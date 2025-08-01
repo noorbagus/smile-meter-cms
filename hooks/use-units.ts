@@ -1,4 +1,3 @@
-// Path: hooks/use-units.ts
 'use client';
 
 import { useCallback, useState } from 'react';
@@ -14,20 +13,18 @@ import {
   UpdateUnitPayload,
   UploadImagePayload
 } from '@/types/unit.types';
-import { useAuth } from './use-auth';
 
 export function useUnits() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
 
-  // Fetch all units with basic info
+  // Fetch all units (trust AuthProvider for auth)
   const getUnits = useCallback(async (): Promise<UnitListItem[]> => {
     setIsLoading(true);
     setError(null);
     
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('units')
         .select(`
           id,
@@ -37,17 +34,14 @@ export function useUnits() {
           updated_at
         `);
       
-      const { data, error } = await query;
-      
       if (error) throw error;
       
-      // Transform data to include additional fields
       const transformedData: UnitListItem[] = data.map(unit => ({
         ...unit,
         status: 'active' as const,
         last_updated: unit.updated_at,
-        manager_name: 'Store Manager', // Mocked for now
-        usage_today: Math.floor(Math.random() * 50) // Mocked for now
+        manager_name: 'Store Manager',
+        usage_today: Math.floor(Math.random() * 50)
       }));
       
       return transformedData;
@@ -59,13 +53,12 @@ export function useUnits() {
     }
   }, []);
 
-  // Get a single unit with detailed info
+  // Get single unit with images
   const getUnit = useCallback(async (unitId: string): Promise<UnitWithImages | null> => {
     setIsLoading(true);
     setError(null);
     
     try {
-      // Get unit details
       const { data: unitData, error: unitError } = await supabase
         .from('units')
         .select(`
@@ -80,7 +73,6 @@ export function useUnits() {
       
       if (unitError) throw unitError;
       
-      // Get unit images
       const { data: imagesData, error: imagesError } = await supabase
         .from('unit_images')
         .select('*')
@@ -88,7 +80,6 @@ export function useUnits() {
       
       if (imagesError) throw imagesError;
       
-      // Format images by category
       const images: { [key in RewardCategory]?: any } = {};
       imagesData?.forEach(image => {
         if (image.category === 'small_prize' || 
@@ -103,7 +94,7 @@ export function useUnits() {
         images,
         status: 'active' as const,
         lastUpdated: unitData.updated_at,
-        manager: undefined // Will be populated with actual manager data when available
+        manager: undefined
       };
     } catch (err: any) {
       setError(err.message);
@@ -113,69 +104,32 @@ export function useUnits() {
     }
   }, []);
 
-  // Get unit statistics
+  // Mock stats (no auth conflicts)
   const getUnitStats = useCallback(async (unitId: string): Promise<UnitStats> => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      // In a real implementation, this would query actual data
-      // For now, return mock data
-      return {
-        totalSessions: 1250,
-        avgSmileScore: 0.78,
-        usageToday: 42,
-        lastActivity: new Date().toISOString()
-      };
-    } catch (err: any) {
-      setError(err.message);
-      return {
-        totalSessions: 0,
-        avgSmileScore: 0,
-        usageToday: 0
-      };
-    } finally {
-      setIsLoading(false);
-    }
+    return {
+      totalSessions: 1250,
+      avgSmileScore: 0.78,
+      usageToday: 42,
+      lastActivity: new Date().toISOString()
+    };
   }, []);
 
-  // Get unit activity history
+  // Mock activity (no auth conflicts)
   const getUnitActivity = useCallback(async (unitId: string): Promise<UnitActivity[]> => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      // In a real implementation, this would query an activity log table
-      // For now, return mock data
-      return [
-        {
-          id: '1',
-          unitId,
-          action: 'updated image',
-          userId: 'user1',
-          userName: 'John Doe',
-          timestamp: new Date().toISOString(),
-          category: 'medium_prize'
-        },
-        {
-          id: '2',
-          unitId,
-          action: 'updated image',
-          userId: 'user1',
-          userName: 'John Doe',
-          timestamp: new Date(Date.now() - 86400000).toISOString(),
-          category: 'small_prize'
-        }
-      ];
-    } catch (err: any) {
-      setError(err.message);
-      return [];
-    } finally {
-      setIsLoading(false);
-    }
+    return [
+      {
+        id: '1',
+        unitId,
+        action: 'updated image',
+        userId: 'user1',
+        userName: 'John Doe',
+        timestamp: new Date().toISOString(),
+        category: 'medium_prize'
+      }
+    ];
   }, []);
 
-  // Create a new unit
+  // Basic CRUD operations (no auth validation)
   const createUnit = useCallback(async (payload: CreateUnitPayload): Promise<Unit | null> => {
     setIsLoading(true);
     setError(null);
@@ -191,7 +145,6 @@ export function useUnits() {
         .single();
       
       if (error) throw error;
-      
       return data;
     } catch (err: any) {
       setError(err.message);
@@ -201,7 +154,6 @@ export function useUnits() {
     }
   }, []);
 
-  // Update an existing unit
   const updateUnit = useCallback(async (unitId: string, payload: UpdateUnitPayload): Promise<Unit | null> => {
     setIsLoading(true);
     setError(null);
@@ -218,7 +170,6 @@ export function useUnits() {
         .single();
       
       if (error) throw error;
-      
       return data;
     } catch (err: any) {
       setError(err.message);
@@ -228,16 +179,13 @@ export function useUnits() {
     }
   }, []);
 
-  // Upload an image for a unit
   const uploadUnitImage = useCallback(async ({ unitId, category, file, userId }: UploadImagePayload): Promise<string | null> => {
     setIsLoading(true);
     setError(null);
     
     try {
-      // Generate a unique file path
       const filePath = `units/${unitId}/${category}/${Date.now()}_${file.name}`;
       
-      // Upload to Supabase Storage (use unit-images bucket)
       const { data: uploadData, error: uploadError } = await supabase
         .storage
         .from('unit-images')
@@ -245,13 +193,11 @@ export function useUnits() {
       
       if (uploadError) throw uploadError;
       
-      // Get public URL
       const { data: { publicUrl } } = supabase
         .storage
         .from('unit-images')
         .getPublicUrl(filePath);
       
-      // Save to database (use unit_images table)
       const { error: dbError } = await supabase
         .from('unit_images')
         .upsert({
@@ -263,7 +209,6 @@ export function useUnits() {
         });
       
       if (dbError) throw dbError;
-      
       return publicUrl;
     } catch (err: any) {
       setError(err.message);
