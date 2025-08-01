@@ -1,3 +1,4 @@
+// components/layout/sidebar.tsx
 'use client';
 
 import { ReactNode } from 'react';
@@ -49,9 +50,9 @@ export default function Sidebar({ isMobileMenuOpen, onCloseMobileMenu }: Sidebar
   const { user, profile, signOut, isAdmin } = useAuth();
   const pathname = usePathname();
 
-  if (!user || !profile) {
-    return null;
-  }
+  // AuthProvider + ClientLayout ensures user exists when Sidebar renders
+  // No need for early return - just render with loading state if needed
+  const userEmail = profile?.email || user?.email || 'Loading...';
 
   // Determine which menu item is active
   const isActive = (path: string) => {
@@ -114,6 +115,9 @@ export default function Sidebar({ isMobileMenuOpen, onCloseMobileMenu }: Sidebar
       </nav>
       
       <div className="p-4 border-t border-gray-200">
+        <div className="mb-3 px-3 py-2 text-xs text-gray-500">
+          {userEmail}
+        </div>
         <button 
           onClick={() => signOut()}
           className="flex items-center w-full px-3 py-2 text-sm font-medium rounded-md text-red-600 hover:bg-red-50 transition-colors"

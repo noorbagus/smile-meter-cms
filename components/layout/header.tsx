@@ -1,3 +1,4 @@
+// components/layout/header.tsx
 'use client';
 
 import { useState } from 'react';
@@ -20,6 +21,11 @@ export default function Header({ onMobileMenuToggle }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const pathname = usePathname();
 
+  // AuthProvider + ClientLayout ensures user exists when Header renders
+  // No need for early return - just render with loading state if needed
+  const userEmail = profile?.email || user?.email || 'Loading...';
+  const userRole = profile?.role || 'Loading...';
+
   // Get current page title based on path
   const getPageTitle = () => {
     if (pathname === '/') return 'Dashboard';
@@ -30,10 +36,6 @@ export default function Header({ onMobileMenuToggle }: HeaderProps) {
     if (pathname.startsWith('/analytics')) return 'Analytics';
     return '';
   };
-
-  if (!user || !profile) {
-    return null;
-  }
 
   return (
     <header className="h-16 bg-white shadow-sm border-b border-gray-200 px-4 md:px-6 flex items-center justify-between">
@@ -82,10 +84,10 @@ export default function Header({ onMobileMenuToggle }: HeaderProps) {
             aria-label="User menu"
           >
             <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
-              {profile.email ? profile.email.charAt(0).toUpperCase() : <Users size={18} className="text-gray-600" />}
+              {userEmail !== 'Loading...' ? userEmail.charAt(0).toUpperCase() : <Users size={18} className="text-gray-600" />}
             </div>
             <span className="text-sm font-medium hidden sm:block">
-              {profile.email}
+              {userEmail}
             </span>
             <ChevronDown size={16} className="text-gray-500 hidden sm:block" />
           </button>
@@ -94,7 +96,7 @@ export default function Header({ onMobileMenuToggle }: HeaderProps) {
             <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
               <div className="p-2 space-y-1">
                 <div className="px-3 py-2 text-sm font-medium border-b border-gray-200">
-                  {profile.role === 'admin' ? 'Administrator' : 'Store Manager'}
+                  {userRole === 'admin' ? 'Administrator' : userRole === 'store_manager' ? 'Store Manager' : userRole}
                 </div>
                 <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded-md transition-colors">
                   Profile
