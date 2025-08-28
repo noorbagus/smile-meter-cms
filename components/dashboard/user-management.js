@@ -7,7 +7,10 @@ const UserManagement = ({ user }) => {
   const [customerServices, setCustomerServices] = useState([]);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(null);
   const [newUser, setNewUser] = useState({ full_name: '', email: '', password: '' });
+  const [editUser, setEditUser] = useState({ full_name: '', email: '' });
   const [selectedCS, setSelectedCS] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -17,21 +20,42 @@ const UserManagement = ({ user }) => {
 
   const loadData = async () => {
     try {
-      // Get units with CS info
+      // Get units first  
       const { data: unitsData } = await supabase
         .from('units')
-        .select(`
-          id, name, location, assigned_cs_id,
-          user_profiles(id, full_name)
-        `)
+        .select('*')
         .order('name');
+
+      // Get CS names for assigned units
+      const assignedCSIds = unitsData?.filter(u => u.assigned_cs_id).map(u => u.assigned_cs_id) || [];
+      let csNames = {};
+
+      if (assignedCSIds.length > 0) {
+        const { data: csData } = await supabase
+          .from('user_profiles')
+          .select('id, full_name')
+          .in('id', assignedCSIds);
+
+        csData?.forEach(cs => {
+          csNames[cs.id] = cs.full_name;
+        });
+      }
+
+      // Add CS names to units
+      const unitsWithCS = unitsData?.map(unit => ({
+        ...unit,
+        user_profiles: unit.assigned_cs_id ? { 
+          id: unit.assigned_cs_id,
+          full_name: csNames[unit.assigned_cs_id] 
+        } : null
+      })) || [];
 
       // Get CS with emails using RPC function
       const { data: csWithEmails } = await supabase
         .rpc('get_cs_with_emails');
 
-      setUnits(unitsData || []);
-      setCustomerServices(csWithEmails);
+      setUnits(unitsWithCS);
+      setCustomerServices(csWithEmails || []);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -103,6 +127,63 @@ const UserManagement = ({ user }) => {
       loadData();
     } catch (error) {
       console.error('Error removing CS:', error);
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    try {
+      // First remove CS from any assigned units
+      await supabase
+        .from('units')
+        .update({ assigned_cs_id: null })
+        .eq('assigned_cs_id', userId);
+
+      // Delete user profile
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .delete()
+        .eq('id', userId);
+
+      if (profileError) throw profileError;
+
+      // Try to delete auth user (may require service role key)
+      try {
+        const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+        if (authError) {
+          console.warn('Could not delete auth user:', authError);
+        }
+      } catch (authError) {
+        console.warn('Auth deletion failed:', authError);
+      }
+
+      setShowDeleteModal(null);
+      loadData();
+      alert('User deleted successfully');
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      alert('Failed to delete user: ' + error.message);
+    }
+  };
+
+  const handleEditUser = async (e) => {
+    e.preventDefault();
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({
+          full_name: editUser.full_name
+        })
+        .eq('id', showEditModal.id);
+
+      if (error) throw error;
+
+      setShowEditModal(null);
+      setEditUser({ full_name: '', email: '' });
+      loadData();
+      alert('User updated successfully');
+    } catch (error) {
+      console.error('Error updating user:', error);
+      alert('Failed to update user: ' + error.message);
     }
   };
 
@@ -195,6 +276,7 @@ const UserManagement = ({ user }) => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assigned Unit</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -211,6 +293,25 @@ const UserManagement = ({ user }) => {
                         <span className="text-sm text-gray-400">Not assigned</span>
                       )}
                     </td>
+                    <td className="px-6 py-4">
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => {
+                            setShowEditModal(cs);
+                            setEditUser({ full_name: cs.full_name, email: cs.email });
+                          }}
+                          className="text-blue-600 hover:text-blue-700 text-sm"
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          onClick={() => setShowDeleteModal(cs)}
+                          className="text-red-600 hover:text-red-700 text-sm"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -219,6 +320,7 @@ const UserManagement = ({ user }) => {
         </div>
       </div>
 
+      {/* Add User Modal */}
       {showAddUserModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
@@ -275,6 +377,7 @@ const UserManagement = ({ user }) => {
         </div>
       )}
 
+      {/* Assign CS Modal */}
       {showAssignModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
@@ -306,6 +409,90 @@ const UserManagement = ({ user }) => {
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 >
                   Assign
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Edit Customer Service</h3>
+            <form onSubmit={handleEditUser} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                <input 
+                  type="text" 
+                  required
+                  value={editUser.full_name}
+                  onChange={(e) => setEditUser({...editUser, full_name: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input 
+                  type="email" 
+                  disabled
+                  value={editUser.email}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100 cursor-not-allowed" 
+                />
+                <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button 
+                  type="button"
+                  onClick={() => setShowEditModal(null)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Update
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <span className="text-red-600 font-bold">!</span>
+              </div>
+              
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Delete User
+              </h3>
+              
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to delete <strong>{showDeleteModal.full_name}</strong>?
+                <br />
+                <span className="text-sm text-red-600">This action cannot be undone.</span>
+              </p>
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowDeleteModal(null)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => handleDeleteUser(showDeleteModal.id)}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                >
+                  Delete User
                 </button>
               </div>
             </div>
