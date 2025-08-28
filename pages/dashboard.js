@@ -40,7 +40,14 @@ const Dashboard = () => {
       console.error('Error loading units:', error);
     }
   };
-
+  const formatUnitName = (unitName) => {
+    return unitName
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+  
   const handleUnitSelect = (unitId) => {
     console.log('🎯 Unit selected:', unitId);
     setSelectedUnit(unitId);
@@ -152,11 +159,11 @@ const Dashboard = () => {
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">Stock Management</h2>
+                <h2 className="text-2xl font-bold text-gray-900">Stock Management {selectedUnit && `${units.find(u => u.id === selectedUnit)?.name}`}</h2>
                 <p className="text-gray-600">Manage product inventory across units</p>
                 {selectedUnit && (
                   <p className="text-sm text-blue-600 mt-1">
-                    Managing: {units.find(u => u.id === selectedUnit)?.name || selectedUnit}
+                  
                   </p>
                 )}
               </div>

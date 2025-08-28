@@ -364,7 +364,7 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="font-semibold text-gray-900 text-sm truncate">{unit.name}</h3>
-                  <p className="text-xs text-gray-500">{unit.location}</p>
+                  <p className="text-xs text-gray-500"></p>
                 </div>
               </div>
               {getAlertIcon(unit.priority)}

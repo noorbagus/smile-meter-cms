@@ -218,7 +218,7 @@ const UserManagement = ({ user }) => {
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h3 className="font-semibold text-gray-900 text-sm">{unit.name}</h3>
-                <p className="text-xs text-gray-500">{unit.location}</p>
+                <p className="text-xs text-gray-500"></p>
               </div>
             </div>
             

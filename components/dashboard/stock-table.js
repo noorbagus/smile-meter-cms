@@ -146,7 +146,7 @@ const StockTable = ({ selectedUnit, user, units = [], onUnitChange }) => {
             <option value="">Select a unit...</option>
             {units.map(unit => (
               <option key={unit.id} value={unit.id}>
-                {unit.name} - {unit.location}
+                {unit.name}
               </option>
             ))}
           </select>
@@ -171,7 +171,7 @@ const StockTable = ({ selectedUnit, user, units = [], onUnitChange }) => {
       <div className="bg-white p-4 rounded-lg shadow-sm border">
         <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Select Unit</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Change Unit</label>
             <select 
               value={selectedUnit}
               onChange={(e) => handleUnitChange(e.target.value)}
@@ -179,7 +179,7 @@ const StockTable = ({ selectedUnit, user, units = [], onUnitChange }) => {
             >
               {units.map(unit => (
                 <option key={unit.id} value={unit.id}>
-                  {unit.name} - {unit.location}
+                  {unit.name}
                 </option>
               ))}
             </select>
@@ -214,7 +214,7 @@ const StockTable = ({ selectedUnit, user, units = [], onUnitChange }) => {
         
         {selectedUnitData && (
           <div className="mt-3 text-sm text-gray-600">
-            <span className="font-medium">{selectedUnitData.name}</span> - {selectedUnitData.location}
+           
           </div>
         )}
       </div>
