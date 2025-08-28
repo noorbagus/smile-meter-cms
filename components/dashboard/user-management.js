@@ -1,4 +1,4 @@
-// components/dashboard/user-management.js
+// components/dashboard/user-management.js - Fixed version
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 
@@ -17,22 +17,21 @@ const UserManagement = ({ user }) => {
 
   const loadData = async () => {
     try {
+      // Get units with CS info
       const { data: unitsData } = await supabase
         .from('units')
         .select(`
           id, name, location, assigned_cs_id,
-          user_profiles(id, full_name, email)
+          user_profiles(id, full_name)
         `)
         .order('name');
 
-      const { data: csData } = await supabase
-        .from('user_profiles')
-        .select('id, full_name, email')
-        .eq('role', 'customer_service')
-        .order('full_name');
+      // Get CS with emails using RPC function
+      const { data: csWithEmails } = await supabase
+        .rpc('get_cs_with_emails');
 
       setUnits(unitsData || []);
-      setCustomerServices(csData || []);
+      setCustomerServices(csWithEmails);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -59,7 +58,6 @@ const UserManagement = ({ user }) => {
           .insert({
             id: authData.user.id,
             full_name: newUser.full_name,
-            email: newUser.email,
             role: 'customer_service'
           });
       }

@@ -1,9 +1,11 @@
-// pages/dashboard.js
+// pages/dashboard.js - Updated with UserManagement
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { Package, Users, BarChart3, Settings } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import Overview from '../components/dashboard/overview';
+import StockTable from '../components/dashboard/stock-table';
+import UserManagement from '../components/dashboard/user-management';
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -141,19 +143,30 @@ const Dashboard = () => {
 
         {activeTab === 'stock' && (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-900">Stock Management</h2>
-            <p className="text-gray-600">Coming soon - Stock editing interface</p>
-            {selectedUnit && (
-              <p className="text-sm text-gray-500">Selected Unit: {selectedUnit}</p>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Stock Management</h2>
+                <p className="text-gray-600">Manage product inventory across all units</p>
+              </div>
+            </div>
+
+            {selectedUnit ? (
+              <StockTable 
+                selectedUnit={selectedUnit} 
+                user={user} 
+              />
+            ) : (
+              <div className="bg-white p-6 rounded-lg shadow-sm text-center">
+                <Package className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Select a Unit</h3>
+                <p className="text-gray-600">Choose a unit from the Overview tab to manage its stock.</p>
+              </div>
             )}
           </div>
         )}
 
         {activeTab === 'users' && (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-900">User Management</h2>
-            <p className="text-gray-600">Coming soon - User management interface</p>
-          </div>
+          <UserManagement user={user} />
         )}
       </main>
     </div>
