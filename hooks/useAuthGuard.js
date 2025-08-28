@@ -1,71 +1,74 @@
-// hooks/useAuthGuard.js - Fixed with navigation throttling prevention
-import { useState, useEffect, useRef } from 'react';
+// hooks/useAuthGuard.js
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../pages/_app';
 
 export const useAuthGuard = (requiredRole = null) => {
-  const { user, profile, loading: authLoading, isRedirecting } = useAuth();
-  const [loading, setLoading] = useState(true);
+  const { user, profile, loading } = useAuth();
   const router = useRouter();
-  const redirected = useRef(false);
+  const hasRedirected = useRef(false);
 
   useEffect(() => {
-    // Prevent multiple redirects
-    if (redirected.current || isRedirecting) return;
+    if (loading) return; // Still checking auth state
+    
+    // Reset redirect flag when user state changes
+    if (!user && hasRedirected.current) {
+      hasRedirected.current = false;
+    }
+    
+    if (hasRedirected.current) return; // Already redirected
 
-    const checkAuth = async () => {
-      if (authLoading) return;
+    console.log('🛡️ Auth guard check:', { user: !!user, profile: profile?.role, requiredRole, currentPath: router.pathname });
 
-      // No user - redirect to login  
-      if (!user) {
-        if (router.pathname !== '/login') {
-          redirected.current = true;
-          await router.replace('/login');
-        }
-        setLoading(false);
-        return;
+    // If no user and not on login page, redirect to login
+    if (!user && router.pathname !== '/login') {
+      console.log('🔒 No user, redirecting to login');
+      hasRedirected.current = true;
+      router.push('/login');
+      return;
+    }
+
+    // If user exists but on login page, redirect based on role
+    if (user && profile && router.pathname === '/login') {
+      console.log('✅ User logged in on login page, redirecting based on role');
+      hasRedirected.current = true;
+      if (profile.role === 'admin') {
+        router.push('/dashboard');
+      } else if (profile.role === 'customer_service') {
+        router.push('/cs-dashboard');
       }
+      return;
+    }
 
-      // No profile - redirect to login
-      if (!profile) {
-        if (router.pathname !== '/login') {
-          redirected.current = true;
-          await router.replace('/login');
-        }
-        setLoading(false);
-        return;
+    // If user exists but no profile, there's an issue
+    if (user && !profile && router.pathname !== '/login') {
+      console.log('❌ User exists but no profile, redirecting to login');
+      hasRedirected.current = true;
+      router.push('/login');
+      return;
+    }
+
+    // Check role requirements for protected pages
+    if (user && profile && requiredRole && profile.role !== requiredRole) {
+      console.log('🚫 Wrong role, redirecting');
+      hasRedirected.current = true;
+      // Redirect to appropriate dashboard based on actual role
+      if (profile.role === 'admin') {
+        router.push('/dashboard');
+      } else if (profile.role === 'customer_service') {
+        router.push('/cs-dashboard');
+      } else {
+        router.push('/login');
       }
+      return;
+    }
 
-      // Check role requirement
-      if (requiredRole && profile.role !== requiredRole) {
-        let targetPath;
-        
-        if (profile.role === 'admin' && router.pathname !== '/dashboard') {
-          targetPath = '/dashboard';
-        } else if (profile.role === 'customer_service' && router.pathname !== '/cs-dashboard') {
-          targetPath = '/cs-dashboard';
-        } else if (router.pathname !== '/login') {
-          targetPath = '/login';
-        }
+  }, [user, profile, loading, requiredRole, router]);
 
-        if (targetPath) {
-          redirected.current = true;
-          await router.replace(targetPath);
-          setLoading(false);
-          return;
-        }
-      }
+  // Reset redirect flag when route changes
+  useEffect(() => {
+    hasRedirected.current = false;
+  }, [router.pathname]);
 
-      // Auth passed - allow access
-      setLoading(false);
-    };
-
-    checkAuth();
-  }, [user, profile, authLoading, requiredRole, router.pathname, isRedirecting]);
-
-  return {
-    user,
-    profile,
-    loading: authLoading || loading
-  };
+  return { user, profile, loading };
 };

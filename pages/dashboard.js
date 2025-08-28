@@ -1,45 +1,62 @@
-// pages/dashboard.js - Fixed version
-import { useState } from 'react';
-import { Package, Users, BarChart3 } from 'lucide-react';
-import { useRouter } from 'next/router';
+// pages/dashboard.js - Complete refactored version
+import { useState, useEffect } from 'react';
+import { Package, Users, BarChart3, Settings } from 'lucide-react';
 import { useAuthGuard } from '../hooks/useAuthGuard';
 import { supabase } from '../lib/supabase';
 import Overview from '../components/dashboard/overview';
-import StockManagement from '../components/dashboard/stock-management';
+import StockTable from '../components/dashboard/stock-table';
 import UserManagement from '../components/dashboard/user-management';
 
 const Dashboard = () => {
-  const router = useRouter();
-  const { unit } = router.query;
-  const [activeTab, setActiveTab] = useState(unit ? 'stock' : 'overview');
-  const [selectedUnit, setSelectedUnit] = useState(unit || null);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [selectedUnit, setSelectedUnit] = useState(null);
+  const [units, setUnits] = useState([]);
   
   // Use auth guard with admin role requirement
   const { user, profile, loading } = useAuthGuard('admin');
 
+  // Load units on component mount
+  useEffect(() => {
+    if (user && profile) {
+      loadUnits();
+    }
+  }, [user, profile]);
+
+  const loadUnits = async () => {
+    try {
+      const { data: unitsData } = await supabase
+        .from('units')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      
+      setUnits(unitsData || []);
+      
+      // Set first unit as default if none selected
+      if (unitsData?.length > 0 && !selectedUnit) {
+        setSelectedUnit(unitsData[0].id);
+      }
+    } catch (error) {
+      console.error('Error loading units:', error);
+    }
+  };
+
   const handleUnitSelect = (unitId) => {
+    console.log('🎯 Unit selected:', unitId);
     setSelectedUnit(unitId);
-    router.push(`/dashboard?unit=${unitId}`, undefined, { shallow: true });
   };
 
   const handleTabChange = (tab) => {
+    console.log('📋 Tab changed to:', tab);
     setActiveTab(tab);
-    if (tab !== 'stock') {
-      router.push('/dashboard', undefined, { shallow: true });
-    }
   };
 
   const handleLogout = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      
-      // Force redirect after logout
-      window.location.href = '/login';
+      console.log('🚪 Admin logout initiated');
+      await supabase.auth.signOut();
     } catch (error) {
       console.error('Logout error:', error);
-      // Force redirect even on error
-      window.location.href = '/login';
     }
   };
 
@@ -71,7 +88,7 @@ const Dashboard = () => {
               <span className="text-sm text-gray-600">Welcome, {profile?.full_name}</span>
               <button 
                 onClick={handleLogout}
-                className="bg-red-100 text-red-700 px-3 py-2 rounded-lg hover:bg-red-200 text-sm font-medium transition-colors"
+                className="bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 text-sm font-medium transition-colors"
               >
                 Logout
               </button>
@@ -85,33 +102,33 @@ const Dashboard = () => {
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
             <button
-              onClick={() => setActiveTab('overview')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              onClick={() => handleTabChange('overview')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'overview'
                   ? 'border-[#2a93ce] text-[#2a93ce]'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
               <BarChart3 className="inline w-4 h-4 mr-2" />
               Overview
             </button>
             <button
-              onClick={() => setActiveTab('stock')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              onClick={() => handleTabChange('stock')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'stock'
                   ? 'border-[#2a93ce] text-[#2a93ce]'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
               <Package className="inline w-4 h-4 mr-2" />
               Stock Management
             </button>
             <button
-              onClick={() => setActiveTab('users')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              onClick={() => handleTabChange('users')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'users'
                   ? 'border-[#2a93ce] text-[#2a93ce]'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
               <Users className="inline w-4 h-4 mr-2" />
@@ -127,11 +144,30 @@ const Dashboard = () => {
           <Overview 
             onUnitSelect={handleUnitSelect}
             onTabChange={handleTabChange}
+            selectedUnit={selectedUnit}
           />
         )}
 
         {activeTab === 'stock' && (
-          <StockManagement user={user} selectedUnit={selectedUnit} />
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Stock Management</h2>
+                <p className="text-gray-600">Manage product inventory across units</p>
+                {selectedUnit && (
+                  <p className="text-sm text-blue-600 mt-1">
+                    Managing: {units.find(u => u.id === selectedUnit)?.name || selectedUnit}
+                  </p>
+                )}
+              </div>
+            </div>
+            <StockTable 
+              selectedUnit={selectedUnit} 
+              user={user} 
+              units={units}
+              onUnitChange={setSelectedUnit}
+            />
+          </div>
         )}
 
         {activeTab === 'users' && (

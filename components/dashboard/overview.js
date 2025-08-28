@@ -1,4 +1,4 @@
-// components/dashboard/overview.js
+// components/dashboard/overview.js - Fixed version
 import React, { useState, useEffect } from 'react';
 import { Store, AlertTriangle, Package, Users, TrendingUp, TrendingDown, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -425,10 +425,13 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
               </span>
             </div>
 
-            {/* Action Button - Updated with URL navigation */}
+            {/* Action Button - FIXED */}
             <button 
               onClick={() => {
-                window.location.href = `/dashboard?unit=${unit.id}`;
+                console.log('🎯 Unit selected:', unit.id);
+                onUnitSelect(unit.id);
+                console.log('📋 Tab changed to: stock');
+                onTabChange('stock');
               }}
               className="w-full bg-blue-600 text-white py-2 px-3 rounded-lg text-xs hover:bg-blue-700 transition-colors"
             >
