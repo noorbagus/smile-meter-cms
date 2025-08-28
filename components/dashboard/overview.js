@@ -1,12 +1,11 @@
+// components/dashboard/overview.js
 import React, { useState, useEffect } from 'react';
 import { Store, AlertTriangle, Package, Users, TrendingUp, TrendingDown } from 'lucide-react';
-import { useAuth } from '../../pages/_app';
+import { supabase } from '../../lib/supabase';
 
 const Overview = ({ onUnitSelect, onTabChange }) => {
   const [units, setUnits] = useState([]);
-  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { supabase } = useAuth();
 
   useEffect(() => {
     fetchOverviewData();
@@ -18,8 +17,8 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
       const { data: unitsData } = await supabase
         .from('units')
         .select(`
-          id, name, is_active,
-          user_profiles!units_assigned_cs_id_fkey (
+          id, name, is_active, assigned_cs_id,
+          user_profiles (
             id, full_name
           )
         `)
@@ -36,18 +35,9 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
         `)
         .eq('products.is_active', true);
 
-      // Fetch unit status
-      const { data: statusData } = await supabase
-        .from('unit_status')
-        .select('unit_id, status, total_stock');
-
-      setUnits(unitsData || []);
-      setProducts(stockData || []);
-      
-      // Combine data for each unit
+      // Process data for each unit
       const enrichedUnits = (unitsData || []).map(unit => {
         const unitStock = stockData?.filter(s => s.unit_id === unit.id) || [];
-        const unitStatus = statusData?.find(s => s.unit_id === unit.id);
         
         const totalStock = unitStock.reduce((sum, item) => sum + item.quantity, 0);
         const emptyProducts = unitStock.filter(item => item.quantity === 0).length;
@@ -63,10 +53,13 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
             criticalProducts,
             availableProducts
           },
-          status: unitStatus?.status || getUnitPriority({ totalStock, emptyProducts, criticalProducts })
+          status: getUnitPriority({ totalStock, emptyProducts, criticalProducts })
         };
       });
 
+      console.log('Units data:', unitsData);
+      console.log('Stock data:', stockData);
+      console.log('Enriched units:', enrichedUnits);
       setUnits(enrichedUnits);
     } catch (error) {
       console.error('Error fetching overview data:', error);
@@ -79,15 +72,15 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
     if (stats.totalStock === 0) return 'empty';
     if (stats.totalStock < 5) return 'critical';
     if (stats.emptyProducts >= 2 || stats.criticalProducts >= 2) return 'warning';
-    return 'available';
+    return 'good';
   };
 
   const getPriorityColor = (status) => {
     switch (status) {
-      case 'empty': return 'border-red-500 bg-red-50';
-      case 'critical': return 'border-yellow-500 bg-yellow-50';
-      case 'warning': return 'border-orange-500 bg-orange-50';
-      default: return 'border-green-500 bg-green-50';
+      case 'empty': return 'border-red-500 bg-white';
+      case 'critical': return 'border-yellow-500 bg-white';
+      case 'warning': return 'border-orange-500 bg-white';
+      default: return 'border-green-500 bg-white';
     }
   };
 
@@ -109,6 +102,7 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
     }
   };
 
+  // Calculate global stats
   const totalStats = units.reduce((acc, unit) => ({
     totalStock: acc.totalStock + unit.stats.totalStock,
     totalUnits: acc.totalUnits + 1,
@@ -132,15 +126,15 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Unit Overview</h2>
-        <p className="text-gray-600">Monitor stock levels across all HPM units</p>
+        <p className="text-gray-600">Monitor stock levels and manage units</p>
       </div>
 
-      {/* Global Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Global Stats - Same as Complete UI UX */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-white p-6 rounded-lg shadow-sm border">
           <div className="flex items-center justify-between">
             <div>
@@ -182,12 +176,12 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
         </div>
       </div>
 
-      {/* Units Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {/* Units Grid - Matching Complete UI UX exactly */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {units.map(unit => (
           <div 
             key={unit.id} 
-            className={`bg-white rounded-lg shadow-sm border-2 p-4 transition-all hover:shadow-md ${getPriorityColor(unit.status)}`}
+            className={`bg-white rounded-lg shadow-sm border-2 p-4 ${getPriorityColor(unit.status)}`}
           >
             {/* Unit Header */}
             <div className="flex justify-between items-start mb-3">
@@ -239,7 +233,7 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
 
             {/* Stock Stats */}
             <div className="bg-white p-2 rounded-lg border mb-3">
-              <div className="grid grid-cols-4 gap-2 text-xs">
+              <div className="flex justify-between items-center text-xs">
                 <div className="text-center">
                   <div className="font-bold text-gray-900">{unit.stats.totalStock}</div>
                   <div className="text-xs text-gray-500">Total</div>

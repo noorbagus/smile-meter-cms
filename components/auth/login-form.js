@@ -29,12 +29,13 @@ const LoginForm = () => {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('count', { count: 'exact', head: true });
+        .select('id')
+        .limit(1);
       
       if (error) {
         addDebug(`❌ Connection test failed: ${error.message}`);
       } else {
-        addDebug(`✅ Connection OK, profiles count: ${data?.length || 'N/A'}`);
+        addDebug(`✅ Connection OK, found ${data?.length || 0} profiles`);
       }
     } catch (err) {
       addDebug(`❌ Connection error: ${err.message}`);
