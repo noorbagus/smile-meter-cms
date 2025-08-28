@@ -1,27 +1,25 @@
-// components/dashboard/stock-table.js
+// components/dashboard/stock-table.js - Enhanced version
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 
-const StockTable = ({ selectedUnit, user }) => {
+const StockTable = ({ selectedUnit, user, units = [], onUnitChange }) => {
   const [products, setProducts] = useState([]);
   const [unitStock, setUnitStock] = useState({});
   const [editingStock, setEditingStock] = useState({});
   const [tempStockValues, setTempStockValues] = useState({});
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [searchQuery, setSearchQuery] = useState('');
   const productsPerPage = 5;
 
   useEffect(() => {
     loadStockData();
   }, [selectedUnit]);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery]);
-
   const loadStockData = async () => {
-    if (!selectedUnit) return;
+    if (!selectedUnit) {
+      setLoading(false);
+      return;
+    }
 
     try {
       const { data: productsData } = await supabase
@@ -46,6 +44,12 @@ const StockTable = ({ selectedUnit, user }) => {
       console.error('Error loading stock data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUnitChange = (unitId) => {
+    if (onUnitChange) {
+      onUnitChange(unitId);
     }
   };
 
@@ -100,10 +104,20 @@ const StockTable = ({ selectedUnit, user }) => {
     setEditingStock({ ...editingStock, [key]: false });
   };
 
-  // Filter products based on search query
-  const filteredProducts = products.filter(product => 
-    product.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const getStockStats = () => {
+    const totalStock = Object.values(unitStock).reduce((sum, qty) => sum + qty, 0);
+    const emptyProducts = Object.values(unitStock).filter(qty => qty === 0).length;
+    const criticalProducts = Object.values(unitStock).filter(qty => qty > 0 && qty <= 5).length;
+    const availableProducts = Object.values(unitStock).filter(qty => qty > 5).length;
+    
+    return { totalStock, emptyProducts, criticalProducts, availableProducts };
+  };
+
+  const getUnitStatus = (totalStock) => {
+    if (totalStock === 0) return { status: 'empty', text: 'Hadiah Habis', color: 'text-red-600' };
+    if (totalStock <= 10) return { status: 'critical', text: 'Hadiah Hampir Habis', color: 'text-yellow-600' };
+    return { status: 'available', text: 'Hadiah Tersedia', color: 'text-green-600' };
+  };
 
   if (loading) {
     return (
@@ -120,69 +134,116 @@ const StockTable = ({ selectedUnit, user }) => {
     );
   }
 
-  const totalPages = Math.ceil(filteredProducts.length / productsPerPage);
-  const paginatedProducts = filteredProducts.slice(
+  if (!selectedUnit) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm p-6 text-center">
+        <p className="text-gray-500 mb-4">Please select a unit to manage stock</p>
+        {units.length > 0 && (
+          <select 
+            onChange={(e) => handleUnitChange(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2"
+          >
+            <option value="">Select a unit...</option>
+            {units.map(unit => (
+              <option key={unit.id} value={unit.id}>
+                {unit.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+    );
+  }
+
+  const selectedUnitData = units.find(u => u.id === selectedUnit);
+  const stats = getStockStats();
+  const unitStatus = getUnitStatus(stats.totalStock);
+  
+  const totalPages = Math.ceil(products.length / productsPerPage);
+  const paginatedProducts = products.slice(
     (currentPage - 1) * productsPerPage,
     currentPage * productsPerPage
   );
 
   return (
-    <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-200">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">
-            Product Stock - {filteredProducts.length} items
-          </h3>
+    <div className="space-y-6">
+      {/* Unit Selector & Stats */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border">
+        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Change Unit</label>
+            <select 
+              value={selectedUnit}
+              onChange={(e) => handleUnitChange(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 w-full lg:w-64"
+            >
+              {units.map(unit => (
+                <option key={unit.id} value={unit.id}>
+                  {unit.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          {/* Unit Stats */}
+          <div className="flex items-center gap-4">
+            <div className="text-center">
+              <div className="text-lg font-bold text-gray-900">{stats.totalStock}</div>
+              <div className="text-xs text-gray-500">Total Stock</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold text-green-600">{stats.availableProducts}</div>
+              <div className="text-xs text-gray-500">Available</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold text-yellow-600">{stats.criticalProducts}</div>
+              <div className="text-xs text-gray-500">Critical</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold text-red-600">{stats.emptyProducts}</div>
+              <div className="text-xs text-gray-500">Empty</div>
+            </div>
+          </div>
+
+          <div className="flex items-center">
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${unitStatus.color} bg-gray-100`}>
+              {unitStatus.text}
+            </span>
+          </div>
         </div>
         
-        {/* Search Input */}
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search products..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <svg 
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" 
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
-        </div>
+        {selectedUnitData && (
+          <div className="mt-3 text-sm text-gray-600">
+           
+          </div>
+        )}
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Product
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Current Stock
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {paginatedProducts.length > 0 ? (
-              paginatedProducts.map(product => {
+      {/* Stock Table */}
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Product Stock - {products.length} items
+          </h3>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Product
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Current Stock
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {paginatedProducts.map(product => {
                 const currentStock = unitStock[product.id] || 0;
                 const isEditing = editingStock[product.id];
                 
@@ -190,6 +251,9 @@ const StockTable = ({ selectedUnit, user }) => {
                   <tr key={product.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div className="font-medium text-gray-900">{product.name}</div>
+                      {product.description && (
+                        <div className="text-sm text-gray-500">{product.description}</div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       {isEditing ? (
@@ -247,56 +311,41 @@ const StockTable = ({ selectedUnit, user }) => {
                     </td>
                   </tr>
                 );
-              })
-            ) : (
-              <tr>
-                <td colSpan="3" className="px-6 py-8 text-center text-gray-500">
-                  {searchQuery ? `No products found for "${searchQuery}"` : 'No products available'}
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery('')}
-                      className="ml-2 text-blue-600 hover:text-blue-700"
-                    >
-                      Clear search
-                    </button>
-                  )}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+              })}
+            </tbody>
+          </table>
+        </div>
 
-      {totalPages > 1 && (
-        <div className="px-6 py-4 bg-gray-50 border-t">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-500">
-              Showing {((currentPage - 1) * productsPerPage) + 1} to{' '}
-              {Math.min(currentPage * productsPerPage, filteredProducts.length)} of {filteredProducts.length} products
-              {searchQuery && ` (filtered from ${products.length} total)`}
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1 border rounded text-sm disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <span className="px-3 py-1 text-sm">
-                {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 border rounded text-sm disabled:opacity-50"
-              >
-                Next
-              </button>
+        {totalPages > 1 && (
+          <div className="px-6 py-4 bg-gray-50 border-t">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-500">
+                Showing {((currentPage - 1) * productsPerPage) + 1} to{' '}
+                {Math.min(currentPage * productsPerPage, products.length)} of {products.length} products
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 border rounded text-sm disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <span className="px-3 py-1 text-sm">
+                  {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 border rounded text-sm disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
