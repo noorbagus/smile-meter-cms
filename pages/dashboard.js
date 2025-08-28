@@ -1,6 +1,7 @@
 // pages/dashboard.js - Fixed version
 import { useState } from 'react';
 import { Package, Users, BarChart3 } from 'lucide-react';
+import { useRouter } from 'next/router';
 import { useAuthGuard } from '../hooks/useAuthGuard';
 import { supabase } from '../lib/supabase';
 import Overview from '../components/dashboard/overview';
@@ -8,18 +9,24 @@ import StockManagement from '../components/dashboard/stock-management';
 import UserManagement from '../components/dashboard/user-management';
 
 const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [selectedUnit, setSelectedUnit] = useState(null);
+  const router = useRouter();
+  const { unit } = router.query;
+  const [activeTab, setActiveTab] = useState(unit ? 'stock' : 'overview');
+  const [selectedUnit, setSelectedUnit] = useState(unit || null);
   
   // Use auth guard with admin role requirement
   const { user, profile, loading } = useAuthGuard('admin');
 
   const handleUnitSelect = (unitId) => {
     setSelectedUnit(unitId);
+    router.push(`/dashboard?unit=${unitId}`, undefined, { shallow: true });
   };
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
+    if (tab !== 'stock') {
+      router.push('/dashboard', undefined, { shallow: true });
+    }
   };
 
   const handleLogout = async () => {
@@ -124,7 +131,7 @@ const Dashboard = () => {
         )}
 
         {activeTab === 'stock' && (
-          <StockManagement user={user} />
+          <StockManagement user={user} selectedUnit={selectedUnit} />
         )}
 
         {activeTab === 'users' && (

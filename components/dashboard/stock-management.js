@@ -395,7 +395,7 @@ const StockManagement = ({ user }) => {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 w-64">
+                    <td className="px-6 py-4 w-">
                       {isEditing ? (
                         <div className="flex items-center gap-2">
                           <input

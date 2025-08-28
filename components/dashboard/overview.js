@@ -425,11 +425,10 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
               </span>
             </div>
 
-            {/* Action Button */}
+            {/* Action Button - Updated with URL navigation */}
             <button 
               onClick={() => {
-                onUnitSelect(unit.id);
-                onTabChange('stock');
+                window.location.href = `/dashboard?unit=${unit.id}`;
               }}
               className="w-full bg-blue-600 text-white py-2 px-3 rounded-lg text-xs hover:bg-blue-700 transition-colors"
             >
