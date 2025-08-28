@@ -206,7 +206,7 @@ const UserManagement = ({ user }) => {
         </div>
         <button 
           onClick={() => setShowAddUserModal(true)}
-          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          className="bg-[#2a93ce] text-white px-4 py-2 rounded-lg hover:bg-[#2485b8] transition-colors"
         >
           Add Customer Service
         </button>
