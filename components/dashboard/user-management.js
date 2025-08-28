@@ -367,7 +367,7 @@ const UserManagement = ({ user }) => {
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  className="flex-1 px-4 py-2 bg-[#2a93ce] text-white rounded-lg hover:bg-[#2485b8]"
                 >
                   Create Account
                 </button>
