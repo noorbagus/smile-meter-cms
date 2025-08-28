@@ -5,7 +5,6 @@ import { useAuth } from '../../pages/_app';
 const Overview = ({ onUnitSelect, onTabChange }) => {
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const { supabase } = useAuth();
 
   useEffect(() => {
@@ -14,25 +13,65 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
 
   const fetchOverviewData = async () => {
     try {
-      setLoading(true);
-      
-      // Fetch units with CS assignments using view
-      const { data: unitsData, error: unitsError } = await supabase
-        .from('unit_stock_overview')
-        .select('*');
+      // Fetch units with CS assignments and stock data
+      const { data: unitsData } = await supabase
+        .from('units')
+        .select(`
+          id, name, location, is_active,
+          user_profiles!units_assigned_cs_id_fkey (
+            id, full_name
+          )
+        `)
+        .eq('is_active', true)
+        .order('name');
 
-      if (unitsError) {
-        console.error('Units fetch error:', unitsError);
-        setError('Failed to load units data');
-      } else {
-        setUnits(unitsData || []);
-      }
+      // Fetch unit stock with products
+      const { data: stockData } = await supabase
+        .from('unit_stock')
+        .select(`
+          unit_id, quantity,
+          products!inner (
+            id, name, is_active
+          )
+        `)
+        .eq('products.is_active', true);
+
+      // Process data for each unit
+      const enrichedUnits = (unitsData || []).map(unit => {
+        const unitStock = stockData?.filter(s => s.unit_id === unit.id) || [];
+        
+        const totalStock = unitStock.reduce((sum, item) => sum + item.quantity, 0);
+        const emptyProducts = unitStock.filter(item => item.quantity === 0).length;
+        const criticalProducts = unitStock.filter(item => item.quantity > 0 && item.quantity <= 5).length;
+        const availableProducts = unitStock.filter(item => item.quantity > 5).length;
+
+        return {
+          ...unit,
+          cs: unit.user_profiles?.full_name || null,
+          stats: {
+            totalStock,
+            totalProducts: unitStock.length,
+            emptyProducts,
+            criticalProducts,
+            availableProducts
+          },
+          status: getUnitStatus({ totalStock, emptyProducts, criticalProducts })
+        };
+      });
+
+      setUnits(enrichedUnits);
     } catch (error) {
       console.error('Error fetching overview data:', error);
-      setError('Failed to load data');
     } finally {
       setLoading(false);
     }
+  };
+
+  const getUnitStatus = (stats) => {
+    if (stats.totalStock === 0) return 'empty';
+    if (stats.totalStock < 5) return 'critical';
+    if (stats.emptyProducts >= 2 || stats.criticalProducts >= 2) return 'warning';
+    return 'available';
   };
 
   const getPriorityColor = (status) => {
@@ -62,46 +101,27 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
     }
   };
 
-  const getUnitStatus = (unit) => {
-    if (!unit.total_stock) return 'empty';
-    if (unit.total_stock < 5 || unit.empty_products >= 2) return 'critical';
-    if (unit.critical_products >= 2) return 'warning';
-    return 'available';
-  };
-
   const totalStats = units.reduce((acc, unit) => ({
-    totalStock: acc.totalStock + (unit.total_stock || 0),
+    totalStock: acc.totalStock + unit.stats.totalStock,
     totalUnits: acc.totalUnits + 1,
-    activeUnits: acc.activeUnits + (unit.total_stock > 0 ? 1 : 0),
-    criticalUnits: acc.criticalUnits + (['critical', 'warning', 'empty'].includes(getUnitStatus(unit)) ? 1 : 0)
+    activeUnits: acc.activeUnits + (unit.stats.totalStock > 0 ? 1 : 0),
+    criticalUnits: acc.criticalUnits + (['critical', 'warning', 'empty'].includes(unit.status) ? 1 : 0)
   }), { totalStock: 0, totalUnits: 0, activeUnits: 0, criticalUnits: 0 });
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <div className="h-8 bg-gray-200 rounded w-48 mb-2 animate-pulse"></div>
+          <div className="h-4 bg-gray-200 rounded w-64 animate-pulse"></div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="bg-white p-6 rounded-lg shadow-sm border animate-pulse">
               <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
               <div className="h-8 bg-gray-200 rounded w-1/2"></div>
             </div>
           ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-700">{error}</p>
-          <button 
-            onClick={fetchOverviewData}
-            className="mt-2 text-red-600 hover:text-red-700 underline"
-          >
-            Try Again
-          </button>
         </div>
       </div>
     );
@@ -116,7 +136,7 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
       </div>
 
       {/* Global Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-6 rounded-lg shadow-sm border">
           <div className="flex items-center justify-between">
             <div>
@@ -159,108 +179,104 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
       </div>
 
       {/* Units Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {units.map(unit => {
-          const status = getUnitStatus(unit);
-          
-          return (
-            <div 
-              key={unit.unit_id} 
-              className={`bg-white rounded-lg shadow-sm border-2 p-4 transition-all hover:shadow-md ${getPriorityColor(status)}`}
-            >
-              {/* Unit Header */}
-              <div className="flex justify-between items-start mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Store className="h-4 w-4 text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 text-sm">{unit.unit_name}</h3>
-                    <p className="text-xs text-gray-500">ID: {unit.unit_id}</p>
-                  </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {units.map(unit => (
+          <div 
+            key={unit.id} 
+            className={`bg-white rounded-lg shadow-sm border-2 p-4 transition-all hover:shadow-md ${getPriorityColor(unit.status)}`}
+          >
+            {/* Unit Header */}
+            <div className="flex justify-between items-start mb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Store className="h-4 w-4 text-blue-600" />
                 </div>
-                
-                {(['critical', 'warning', 'empty'].includes(status)) && (
-                  <AlertTriangle size={14} className={`${
-                    status === 'empty' ? 'text-red-600' : 
-                    status === 'critical' ? 'text-yellow-600' : 'text-orange-600'
-                  }`} />
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-sm">{unit.name}</h3>
+                  <p className="text-xs text-gray-500">ID: {unit.id}</p>
+                </div>
+              </div>
+              
+              {(['critical', 'warning', 'empty'].includes(unit.status)) && (
+                <AlertTriangle size={14} className={`${
+                  unit.status === 'empty' ? 'text-red-600' : 
+                  unit.status === 'critical' ? 'text-yellow-600' : 'text-orange-600'
+                }`} />
+              )}
+            </div>
+
+            {/* CS Assignment */}
+            <div className="mb-3">
+              <div className={`p-2 rounded-lg h-12 flex items-center text-xs ${
+                unit.cs ? 'bg-white border' : 'bg-white border border-red-200'
+              }`}>
+                {unit.cs ? (
+                  <div className="flex items-center justify-between w-full">
+                    <div>
+                      <p className="font-medium text-gray-900">{unit.cs}</p>
+                    </div>
+                    <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
+                      Active
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between w-full">
+                    <p className="text-red-700">No CS assigned</p>
+                    <button 
+                      onClick={() => onTabChange('users')}
+                      className="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
+                    >
+                      Assign
+                    </button>
+                  </div>
                 )}
               </div>
-
-              {/* CS Assignment */}
-              <div className="mb-3">
-                <div className={`p-2 rounded-lg h-12 flex items-center text-xs ${
-                  unit.cs_name ? 'bg-white border' : 'bg-white border border-red-200'
-                }`}>
-                  {unit.cs_name ? (
-                    <div className="flex items-center justify-between w-full">
-                      <div>
-                        <p className="font-medium text-gray-900">{unit.cs_name}</p>
-                      </div>
-                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
-                        Active
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between w-full">
-                      <p className="text-red-700">No CS assigned</p>
-                      <button 
-                        onClick={() => onTabChange && onTabChange('users')}
-                        className="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
-                      >
-                        Assign
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Stock Stats */}
-              <div className="bg-white p-2 rounded-lg border mb-3">
-                <div className="grid grid-cols-4 gap-2 text-xs">
-                  <div className="text-center">
-                    <div className="font-bold text-gray-900">{unit.total_stock || 0}</div>
-                    <div className="text-xs text-gray-500">Total</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-bold text-green-600">{unit.available_products || 0}</div>
-                    <div className="text-xs text-gray-500">OK</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-bold text-yellow-600">{unit.critical_products || 0}</div>
-                    <div className="text-xs text-gray-500">Critical</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-bold text-red-600">{unit.empty_products || 0}</div>
-                    <div className="text-xs text-gray-500">Empty</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Status Badge */}
-              <div className="mb-3">
-                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPriorityBadge(status)}`}>
-                  {getStatusText(status)}
-                </span>
-              </div>
-
-              {/* Action Button */}
-              <button 
-                onClick={() => {
-                  if (onUnitSelect) onUnitSelect(unit.unit_id);
-                  if (onTabChange) onTabChange('stock');
-                }}
-                className="w-full bg-blue-600 text-white py-2 px-3 rounded-lg text-xs hover:bg-blue-700 transition-colors"
-              >
-                Manage Stock
-              </button>
             </div>
-          );
-        })}
+
+            {/* Stock Stats */}
+            <div className="bg-white p-2 rounded-lg border mb-3">
+              <div className="grid grid-cols-4 gap-2 text-xs">
+                <div className="text-center">
+                  <div className="font-bold text-gray-900">{unit.stats.totalStock}</div>
+                  <div className="text-xs text-gray-500">Total</div>
+                </div>
+                <div className="text-center">
+                  <div className="font-bold text-green-600">{unit.stats.availableProducts}</div>
+                  <div className="text-xs text-gray-500">OK</div>
+                </div>
+                <div className="text-center">
+                  <div className="font-bold text-yellow-600">{unit.stats.criticalProducts}</div>
+                  <div className="text-xs text-gray-500">Critical</div>
+                </div>
+                <div className="text-center">
+                  <div className="font-bold text-red-600">{unit.stats.emptyProducts}</div>
+                  <div className="text-xs text-gray-500">Empty</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Status Badge */}
+            <div className="mb-3">
+              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPriorityBadge(unit.status)}`}>
+                {getStatusText(unit.status)}
+              </span>
+            </div>
+
+            {/* Action Button */}
+            <button 
+              onClick={() => {
+                onUnitSelect(unit.id);
+                onTabChange('stock');
+              }}
+              className="w-full bg-blue-600 text-white py-2 px-3 rounded-lg text-xs hover:bg-blue-700 transition-colors"
+            >
+              Manage Stock
+            </button>
+          </div>
+        ))}
       </div>
 
-      {units.length === 0 && !loading && (
+      {units.length === 0 && (
         <div className="text-center py-12">
           <Store className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">No units found</h3>
