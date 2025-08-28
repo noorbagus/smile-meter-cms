@@ -1,3 +1,4 @@
+// components/dashboard/overview.js
 import React, { useState, useEffect } from 'react';
 import { Store, AlertTriangle, Package, Users, TrendingUp, TrendingDown } from 'lucide-react';
 import { useAuth } from '../../pages/_app';
@@ -17,8 +18,8 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
       const { data: unitsData } = await supabase
         .from('units')
         .select(`
-          id, name, location, is_active,
-          user_profiles!units_assigned_cs_id_fkey (
+          id, name, location, is_active, assigned_cs_id,
+          user_profiles (
             id, full_name
           )
         `)
