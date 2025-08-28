@@ -1,10 +1,10 @@
-// pages/dashboard.js
+// pages/dashboard.js - Fixed version
 import { useState } from 'react';
-import { Package, Users, BarChart3, Settings } from 'lucide-react';
+import { Package, Users, BarChart3 } from 'lucide-react';
 import { useAuthGuard } from '../hooks/useAuthGuard';
 import { supabase } from '../lib/supabase';
 import Overview from '../components/dashboard/overview';
-import StockTable from '../components/dashboard/stock-table';
+import StockManagement from '../components/dashboard/stock-management';
 import UserManagement from '../components/dashboard/user-management';
 
 const Dashboard = () => {
@@ -23,7 +23,17 @@ const Dashboard = () => {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
+      // Force redirect after logout
+      window.location.href = '/login';
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Force redirect even on error
+      window.location.href = '/login';
+    }
   };
 
   // Show loading while checking auth
@@ -114,24 +124,11 @@ const Dashboard = () => {
         )}
 
         {activeTab === 'stock' && (
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">Stock Management</h2>
-                <p className="text-gray-600">Manage product inventory across units</p>
-              </div>
-            </div>
-            <StockTable selectedUnit={selectedUnit} user={user} />
-          </div>
+          <StockManagement user={user} />
         )}
 
         {activeTab === 'users' && (
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-
-            </div>
-            <UserManagement user={user} />
-          </div>
+          <UserManagement user={user} />
         )}
       </main>
     </div>

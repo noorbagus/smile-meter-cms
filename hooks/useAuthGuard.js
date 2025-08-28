@@ -1,44 +1,71 @@
-// hooks/useAuthGuard.js
-import { useEffect } from 'react';
+// hooks/useAuthGuard.js - Fixed with navigation throttling prevention
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../pages/_app';
 
-export const useAuthGuard = (requiredRole = null, redirectTo = '/login') => {
-  const { user, profile, loading } = useAuth();
+export const useAuthGuard = (requiredRole = null) => {
+  const { user, profile, loading: authLoading, isRedirecting } = useAuth();
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const redirected = useRef(false);
 
   useEffect(() => {
-    if (loading) return; // Wait for auth to load
+    // Prevent multiple redirects
+    if (redirected.current || isRedirecting) return;
 
-    // If no user, redirect to login
-    if (!user || !profile) {
-      if (router.pathname !== '/login') {
-        router.replace('/login');
+    const checkAuth = async () => {
+      if (authLoading) return;
+
+      // No user - redirect to login  
+      if (!user) {
+        if (router.pathname !== '/login') {
+          redirected.current = true;
+          await router.replace('/login');
+        }
+        setLoading(false);
+        return;
       }
-      return;
-    }
 
-    // If user is on login page, redirect based on role
-    if (router.pathname === '/login') {
-      if (profile.role === 'admin') {
-        router.replace('/dashboard');
-      } else if (profile.role === 'customer_service') {
-        router.replace('/cs-dashboard');
+      // No profile - redirect to login
+      if (!profile) {
+        if (router.pathname !== '/login') {
+          redirected.current = true;
+          await router.replace('/login');
+        }
+        setLoading(false);
+        return;
       }
-      return;
-    }
 
-    // Check role-based access
-    if (requiredRole && profile.role !== requiredRole) {
-      if (profile.role === 'admin') {
-        router.replace('/dashboard');
-      } else if (profile.role === 'customer_service') {
-        router.replace('/cs-dashboard');
-      } else {
-        router.replace('/login');
+      // Check role requirement
+      if (requiredRole && profile.role !== requiredRole) {
+        let targetPath;
+        
+        if (profile.role === 'admin' && router.pathname !== '/dashboard') {
+          targetPath = '/dashboard';
+        } else if (profile.role === 'customer_service' && router.pathname !== '/cs-dashboard') {
+          targetPath = '/cs-dashboard';
+        } else if (router.pathname !== '/login') {
+          targetPath = '/login';
+        }
+
+        if (targetPath) {
+          redirected.current = true;
+          await router.replace(targetPath);
+          setLoading(false);
+          return;
+        }
       }
-    }
-  }, [user, profile, loading, router, requiredRole, redirectTo]);
 
-  return { user, profile, loading };
+      // Auth passed - allow access
+      setLoading(false);
+    };
+
+    checkAuth();
+  }, [user, profile, authLoading, requiredRole, router.pathname, isRedirecting]);
+
+  return {
+    user,
+    profile,
+    loading: authLoading || loading
+  };
 };
