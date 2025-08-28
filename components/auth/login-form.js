@@ -15,21 +15,16 @@ const LoginForm = () => {
     setError('');
 
     try {
-      console.log('Starting login...');
-      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
-        console.error('Auth error:', error);
         setError(error.message);
         return;
       }
 
-      console.log('Login success, getting profile...');
-      
       const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
         .select('*')
@@ -37,12 +32,9 @@ const LoginForm = () => {
         .single();
 
       if (profileError) {
-        console.error('Profile error:', profileError);
         setError('Profile not found');
         return;
       }
-
-      console.log('Profile found:', profile);
 
       // Redirect based on role
       if (profile.role === 'admin') {
@@ -52,7 +44,6 @@ const LoginForm = () => {
       }
 
     } catch (err) {
-      console.error('Login error:', err);
       setError('Login failed');
     } finally {
       setLoading(false);
@@ -63,10 +54,13 @@ const LoginForm = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 bg-blue-600 rounded-lg flex items-center justify-center">
+          <div 
+            className="mx-auto h-12 w-12 rounded-lg flex items-center justify-center"
+            style={{backgroundColor: '#2a93ce'}}
+          >
             <span className="text-white font-bold text-xl">SM</span>
           </div>
-          <h2 className="mt-6 text-3xl font-bold text-gray-900">Stock Manager</h2>
+          <h2 className="mt-6 text-3xl font-bold text-gray-900">Smile Meter Stock Manager</h2>
           <p className="mt-2 text-sm text-gray-600">Sign in to your account</p>
         </div>
 
@@ -106,7 +100,8 @@ const LoginForm = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full text-white py-2 px-4 rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{backgroundColor: '#2a93ce'}}
           >
             {loading ? 'Signing in...' : 'Sign in'}
           </button>

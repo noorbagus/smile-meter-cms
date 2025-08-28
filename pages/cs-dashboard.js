@@ -1,6 +1,7 @@
 // pages/cs-dashboard.js
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import { Search } from 'lucide-react';
 import { useAuth } from './_app';
 
 const CSDashboard = () => {
@@ -8,6 +9,7 @@ const CSDashboard = () => {
   const [products, setProducts] = useState([]);
   const [unitStock, setUnitStock] = useState({});
   const [showConfirmModal, setShowConfirmModal] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const { user, profile, supabase, signOut } = useAuth();
@@ -129,6 +131,11 @@ const CSDashboard = () => {
     await signOut();
   };
 
+  // Filter products based on search term
+  const filteredProducts = products.filter(product =>
+    product.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -148,8 +155,7 @@ const CSDashboard = () => {
       <header className="bg-white shadow-sm border-b sticky top-0 z-30">
         <div className="flex items-center justify-between p-4">
           <div className="text-center flex-1">
-            <h1 className="font-semibold text-gray-900">Stock Manager</h1>
-            <p className="text-xs text-gray-500 truncate">{userUnit?.name}</p>
+            <h1 className="font-semibold text-gray-900 text-base">STOCK MANAGER {userUnit?.name}</h1>
           </div>
           
           <button 
@@ -164,7 +170,7 @@ const CSDashboard = () => {
       <div className="p-4">
         <div className={`rounded-xl p-4 ${
           status === 'available' 
-            ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' 
+            ? 'bg-gradient-to-r from-[#2a93ce] to-[#2a93ce] text-white' 
             : 'bg-gradient-to-r from-red-500 to-red-600 text-white'
         }`}>
           <div className="flex items-center justify-between">
@@ -177,7 +183,7 @@ const CSDashboard = () => {
               <p className="text-sm opacity-90">Total Stock: {totalStock} items</p>
             </div>
             <div className="text-right">
-              <div className="text-2xl font-bold">{products.filter(p => (unitStock[p.id] || 0) > 0).length}</div>
+              <div className="text-2xl font-bold">{filteredProducts.filter(p => (unitStock[p.id] || 0) > 0).length}</div>
               <div className="text-xs opacity-90">Available Products</div>
             </div>
           </div>
@@ -187,18 +193,18 @@ const CSDashboard = () => {
       <div className="px-4 pb-4">
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-white rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-blue-600">{products.filter(p => (unitStock[p.id] || 0) > 10).length}</div>
+            <div className="text-lg font-bold text-blue-600">{filteredProducts.filter(p => (unitStock[p.id] || 0) > 10).length}</div>
             <div className="text-xs text-gray-600">High Stock</div>
           </div>
           <div className="bg-white rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-orange-600">{products.filter(p => {
+            <div className="text-lg font-bold text-orange-600">{filteredProducts.filter(p => {
               const stock = unitStock[p.id] || 0;
               return stock > 0 && stock <= 10;
             }).length}</div>
             <div className="text-xs text-gray-600">Low Stock</div>
           </div>
           <div className="bg-white rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-red-600">{products.filter(p => (unitStock[p.id] || 0) === 0).length}</div>
+            <div className="text-lg font-bold text-red-600">{filteredProducts.filter(p => (unitStock[p.id] || 0) === 0).length}</div>
             <div className="text-xs text-gray-600">Out of Stock</div>
           </div>
         </div>
@@ -207,11 +213,23 @@ const CSDashboard = () => {
       <div className="px-4 pb-20">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Products</h2>
-          <span className="text-sm text-gray-500">{products.length} items</span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-500">{filteredProducts.length} items</span>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm w-48 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
         </div>
 
         <div className="space-y-3">
-          {products.map(product => {
+          {filteredProducts.map(product => {
             const stock = unitStock[product.id] || 0;
             return (
               <div key={product.id} className="bg-white rounded-lg shadow-sm border">
@@ -249,6 +267,15 @@ const CSDashboard = () => {
             );
           })}
         </div>
+
+        {filteredProducts.length === 0 && (
+          <div className="text-center py-8">
+            <div className="text-gray-400 mb-2">
+              <Search className="mx-auto h-12 w-12" />
+            </div>
+            <p className="text-gray-500">No products found matching "{searchTerm}"</p>
+          </div>
+        )}
       </div>
 
       {showConfirmModal && (
