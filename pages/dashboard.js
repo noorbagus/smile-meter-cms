@@ -89,7 +89,7 @@ const Dashboard = () => {
               <div className="h-8 w-8 bg-[#2a93ce] rounded flex items-center justify-center text-white font-bold">
                 SM
               </div>
-              <h1 className="text-xl font-semibold text-gray-900">HPM Stock Manager</h1>
+              <h1 className="text-xl font-semibold text-gray-900">Smile Meter Stock Manager</h1>
             </div>
             <div className="flex items-center gap-4">
               <span className="text-sm text-gray-600">Welcome, {profile?.full_name}</span>
