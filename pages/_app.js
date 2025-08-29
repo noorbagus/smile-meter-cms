@@ -68,7 +68,7 @@ const AuthProvider = ({ children }) => {
             setUser(null);
             setProfile(null);
             
-            // Only redirect to login if not already there
+            // Only redirect to login if not already there.
             if (router.pathname !== '/login') {
               router.replace('/login');
             }
