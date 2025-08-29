@@ -9,6 +9,7 @@ const CSDashboard = () => {
   const [unitStock, setUnitStock] = useState({});
   const [showConfirmModal, setShowConfirmModal] = useState(null);
   const [reduceAmount, setReduceAmount] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
   const [dataLoading, setDataLoading] = useState(true);
 
   // Use auth guard with CS role requirement
@@ -157,6 +158,11 @@ const CSDashboard = () => {
   const status = getUnitStatus();
   const totalStock = getTotalStock();
 
+  // Filter products based on search query
+  const filteredProducts = products.filter(product => 
+    product.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b sticky top-0 z-30">
@@ -200,18 +206,18 @@ const CSDashboard = () => {
       <div className="px-4 pb-4">
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-white rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-blue-600">{products.filter(p => (unitStock[p.id] || 0) > 10).length}</div>
+            <div className="text-lg font-bold text-blue-600">{filteredProducts.filter(p => (unitStock[p.id] || 0) > 10).length}</div>
             <div className="text-xs text-gray-600">High Stock</div>
           </div>
           <div className="bg-white rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-orange-600">{products.filter(p => {
+            <div className="text-lg font-bold text-orange-600">{filteredProducts.filter(p => {
               const stock = unitStock[p.id] || 0;
               return stock > 0 && stock <= 10;
             }).length}</div>
             <div className="text-xs text-gray-600">Low Stock</div>
           </div>
           <div className="bg-white rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-red-600">{products.filter(p => (unitStock[p.id] || 0) === 0).length}</div>
+            <div className="text-lg font-bold text-red-600">{filteredProducts.filter(p => (unitStock[p.id] || 0) === 0).length}</div>
             <div className="text-xs text-gray-600">Out of Stock</div>
           </div>
         </div>
@@ -220,11 +226,39 @@ const CSDashboard = () => {
       <div className="px-4 pb-20">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Products</h2>
-          <span className="text-sm text-gray-500">{products.length} items</span>
+          <span className="text-sm text-gray-500">
+            {filteredProducts.length}{searchQuery && ` of ${products.length}`} items
+          </span>
+        </div>
+
+        {/* Search Bar */}
+        <div className="mb-4">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search products..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm"
+            />
+            <svg className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-3.5 h-4 w-4 text-gray-400 hover:text-gray-600"
+              >
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="space-y-3">
-          {products.map(product => {
+          {filteredProducts.map(product => {
             const stock = unitStock[product.id] || 0;
             return (
               <div key={product.id} className="bg-white rounded-lg shadow-sm border">
@@ -262,6 +296,25 @@ const CSDashboard = () => {
             );
           })}
         </div>
+
+        {/* No results message */}
+        {filteredProducts.length === 0 && searchQuery && (
+          <div className="text-center py-12">
+            <div className="text-gray-400 mb-2">
+              <svg className="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <h3 className="text-sm font-medium text-gray-900 mb-1">No products found</h3>
+            <p className="text-sm text-gray-500">Try searching with different keywords</p>
+            <button
+              onClick={() => setSearchQuery('')}
+              className="mt-2 text-sm text-blue-600 hover:text-blue-700"
+            >
+              Clear search
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Enhanced Confirm Modal with Custom Amount Input */}
