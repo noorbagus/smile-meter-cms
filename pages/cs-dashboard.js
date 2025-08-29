@@ -162,8 +162,7 @@ const CSDashboard = () => {
       <header className="bg-white shadow-sm border-b sticky top-0 z-30">
         <div className="flex items-center justify-between p-4">
           <div className="text-center flex-1">
-            <h1 className="font-semibold text-gray-900">Stock Manager</h1>
-            <p className="text-xs text-gray-500 truncate">{userUnit?.name}</p>
+            <h1 className="font-semibold text-gray-900">Stock Manager {userUnit?.name}</h1>
           </div>
           
           <button 
