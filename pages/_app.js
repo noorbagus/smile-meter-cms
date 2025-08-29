@@ -1,4 +1,4 @@
-// pages/_app.js - Fixed with clear state logout
+// pages/_app.js - Fixed version untuk reload issue
 import { useState, useEffect, createContext, useContext } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
@@ -12,6 +12,7 @@ const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
   const router = useRouter();
 
   const getUserProfile = async (userId) => {
@@ -35,44 +36,71 @@ const AuthProvider = ({ children }) => {
     }
   };
 
+  // SINGLE useEffect - hanya pakai onAuthStateChange
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        console.log('🔐 Initial session:', session);
-        
-        if (session?.user) {
-          setUser(session.user);
-          const userProfile = await getUserProfile(session.user.id);
-          setProfile(userProfile);
-        }
-      } catch (error) {
-        console.error('❌ Auth init error:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initAuth();
-
+    console.log('🔐 Setting up auth listener...');
+    
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('🔄 Auth state change:', event, session?.user?.email);
         
-        if (event === 'SIGNED_IN' && session?.user) {
-          setUser(session.user);
-          const userProfile = await getUserProfile(session.user.id);
-          setProfile(userProfile);
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null);
-          setProfile(null);
-          router.push('/login');
+        try {
+          if (event === 'SIGNED_IN' && session?.user) {
+            setUser(session.user);
+            console.log('👤 Fetching profile for:', session.user.id);
+            
+            const userProfile = await getUserProfile(session.user.id);
+            setProfile(userProfile);
+            
+            // Redirect based on role
+            if (userProfile && !initialized) {
+              const targetPath = userProfile.role === 'admin' ? '/dashboard' : '/cs-dashboard';
+              console.log('🎯 Redirecting to:', targetPath);
+              
+              // Only redirect if not already on target page
+              if (router.pathname !== targetPath) {
+                setTimeout(() => router.replace(targetPath), 100);
+              }
+            }
+            
+          } else if (event === 'SIGNED_OUT') {
+            console.log('🚪 User signed out');
+            setUser(null);
+            setProfile(null);
+            
+            // Only redirect to login if not already there
+            if (router.pathname !== '/login') {
+              router.replace('/login');
+            }
+            
+          } else if (event === 'TOKEN_REFRESHED') {
+            console.log('🔄 Token refreshed');
+            // Don't fetch profile again on token refresh if we already have it
+            
+          } else if (event === 'INITIAL_SESSION') {
+            console.log('🔐 Initial session:', session?.user?.email);
+            
+            if (session?.user) {
+              setUser(session.user);
+              const userProfile = await getUserProfile(session.user.id);
+              setProfile(userProfile);
+            }
+          }
+          
+        } catch (error) {
+          console.error('❌ Auth state change error:', error);
+        } finally {
+          setLoading(false);
+          setInitialized(true);
         }
       }
     );
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      console.log('🧹 Cleaning up auth listener');
+      subscription.unsubscribe();
+    };
+  }, []); // Empty dependency array - hanya run sekali
 
   const signIn = async (email, password) => {
     try {
@@ -89,31 +117,6 @@ const AuthProvider = ({ children }) => {
       }
 
       console.log('✅ Auth success:', data);
-      
-      if (data.user) {
-        console.log('👤 Fetching profile for:', data.user.id);
-        const profile = await getUserProfile(data.user.id);
-        
-        if (profile) {
-          setUser(data.user);
-          setProfile(profile);
-          
-          console.log('🎯 Redirecting based on role:', profile.role);
-          setTimeout(() => {
-            if (profile.role === 'admin') {
-              window.location.href = '/dashboard';
-            } else if (profile.role === 'customer_service') {
-              window.location.href = '/cs-dashboard';
-            }
-          }, 100);
-          
-          return { success: true, data };
-        } else {
-          console.error('❌ No profile found');
-          return { success: false, error: 'Profile not found' };
-        }
-      }
-
       return { success: true, data };
     } catch (error) {
       console.error('❌ Login error:', error);
@@ -122,46 +125,8 @@ const AuthProvider = ({ children }) => {
   };
 
   const signOut = async () => {
-    try {
-      console.log('🚪 Starting logout...');
-      
-      // Clear local state immediately
-      setUser(null);
-      setProfile(null);
-      
-      // Sign out from Supabase
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('❌ Logout error:', error);
-      }
-      
-      // Clear any remaining browser session data
-      if (typeof window !== 'undefined') {
-        // Clear localStorage
-        Object.keys(localStorage).forEach(key => {
-          if (key.includes('supabase') || key.includes('auth')) {
-            localStorage.removeItem(key);
-          }
-        });
-        
-        // Clear sessionStorage
-        Object.keys(sessionStorage).forEach(key => {
-          if (key.includes('supabase') || key.includes('auth')) {
-            sessionStorage.removeItem(key);
-          }
-        });
-      }
-      
-      console.log('✅ State cleared, redirecting...');
-      
-      // Force full page reload to login
-      window.location.href = '/login';
-      
-    } catch (error) {
-      console.error('❌ Logout failed:', error);
-      // Force redirect even if logout fails
-      window.location.href = '/login';
-    }
+    console.log('🚪 Signing out...');
+    await supabase.auth.signOut();
   };
 
   return (
