@@ -1,130 +1,103 @@
-// hooks/useAuthGuard.js - Improved version
+// hooks/useAuthGuard.js
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { useAuth } from '../pages/_app';
+import { supabase } from '../lib/supabase';
 
 export const useAuthGuard = (requiredRole = null) => {
-  const { user, profile, loading: authLoading } = useAuth();
-  const [localLoading, setLocalLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
     const checkAuth = async () => {
-      // Wait for auth context to finish loading
-      if (authLoading) {
-        console.log('⏳ Auth context loading...');
-        return;
-      }
-
-      console.log('🛡️ Auth guard check:', {
-        user: user?.email || 'No user',
-        profile: profile?.role || 'No profile',
-        requiredRole,
-        currentPath: router.pathname,
-        authLoading
-      });
-
       try {
-        // Case 1: No user
-        if (!user) {
+        // Get current session
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Session error:', error);
+          setLoading(false);
+          return;
+        }
+
+        if (!session?.user) {
+          // No session, redirect to login unless already there
           if (router.pathname !== '/login') {
-            console.log('🔒 No user, redirecting to login');
-            await router.replace('/login');
-            return;
+            router.replace('/login');
           }
-          // User is on login page and not authenticated - correct state
-          setLocalLoading(false);
+          setLoading(false);
           return;
         }
 
-        // Case 2: User exists but no profile
-        if (!profile) {
-          console.log('❌ User exists but no profile, redirecting to login');
-          await router.replace('/login');
+        // Get user profile
+        const { data: profileData, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .eq('is_active', true)
+          .single();
+
+        if (profileError || !profileData) {
+          console.error('Profile error:', profileError);
+          await supabase.auth.signOut();
+          router.replace('/login');
+          setLoading(false);
           return;
         }
 
-        // Case 3: Authenticated user on login page
+        // Check role requirements
+        if (requiredRole && profileData.role !== requiredRole) {
+          console.error('Access denied: insufficient role');
+          
+          // Redirect to appropriate dashboard based on actual role
+          const redirectPath = profileData.role === 'admin' ? '/dashboard' : '/cs-dashboard';
+          if (router.pathname !== redirectPath) {
+            router.replace(redirectPath);
+          }
+          setLoading(false);
+          return;
+        }
+
+        // All checks passed
+        setUser(session.user);
+        setProfile(profileData);
+
+        // Redirect authenticated users away from login page
         if (router.pathname === '/login') {
-          console.log('✅ Authenticated user on login, redirecting to dashboard');
-          if (profile.role === 'admin') {
-            await router.replace('/dashboard');
-          } else if (profile.role === 'customer_service') {
-            await router.replace('/cs-dashboard');
-          } else {
-            console.log('❌ Unknown role:', profile.role);
-            await router.replace('/login');
-          }
+          const dashboardPath = profileData.role === 'admin' ? '/dashboard' : '/cs-dashboard';
+          router.replace(dashboardPath);
           return;
         }
-
-        // Case 4: Role-based access control
-        if (requiredRole && profile.role !== requiredRole) {
-          console.log(`🚫 Access denied. Required: ${requiredRole}, User has: ${profile.role}`);
-          // Redirect to appropriate dashboard
-          if (profile.role === 'admin') {
-            await router.replace('/dashboard');
-          } else if (profile.role === 'customer_service') {
-            await router.replace('/cs-dashboard');
-          } else {
-            await router.replace('/login');
-          }
-          return;
-        }
-
-        // Case 5: All checks passed
-        console.log('✅ Auth guard passed');
-        setLocalLoading(false);
 
       } catch (error) {
-        console.error('❌ Auth guard error:', error);
-        setLocalLoading(false);
+        console.error('Auth check error:', error);
+        router.replace('/login');
+      } finally {
+        setLoading(false);
       }
     };
 
     checkAuth();
-  }, [user, profile, authLoading, requiredRole, router]);
 
-  // Reset local loading when route changes (except programmatic navigation)
-  useEffect(() => {
-    const handleRouteChangeStart = () => {
-      console.log('🔄 Route changing...');
-    };
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_OUT' || !session) {
+          setUser(null);
+          setProfile(null);
+          if (router.pathname !== '/login') {
+            router.replace('/login');
+          }
+        } else if (event === 'SIGNED_IN') {
+          // Refresh the page or re-check auth
+          checkAuth();
+        }
+      }
+    );
 
-    const handleRouteChangeComplete = () => {
-      console.log('✅ Route change complete');
-      setLocalLoading(false);
-    };
+    return () => subscription.unsubscribe();
+  }, [router.pathname, requiredRole]);
 
-    const handleRouteChangeError = () => {
-      console.log('❌ Route change error');
-      setLocalLoading(false);
-    };
-
-    router.events.on('routeChangeStart', handleRouteChangeStart);
-    router.events.on('routeChangeComplete', handleRouteChangeComplete);
-    router.events.on('routeChangeError', handleRouteChangeError);
-
-    return () => {
-      router.events.off('routeChangeStart', handleRouteChangeStart);
-      router.events.off('routeChangeComplete', handleRouteChangeComplete);
-      router.events.off('routeChangeError', handleRouteChangeError);
-    };
-  }, [router]);
-
-  const totalLoading = authLoading || localLoading;
-
-  console.log('🔍 useAuthGuard return:', {
-    user: user?.email || 'No user',
-    profile: profile?.role || 'No profile', 
-    loading: totalLoading,
-    authLoading,
-    localLoading
-  });
-
-  return {
-    user,
-    profile,
-    loading: totalLoading
-  };
+  return { user, profile, loading };
 };
