@@ -15,9 +15,12 @@ const AuthProvider = ({ children }) => {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const router = useRouter();
 
-  const getUserProfile = async (userId) => {
+// Fix untuk _app.js - tambahkan timeout dan retry
+const getUserProfile = async (userId, retries = 3) => {
+  for (let i = 0; i < retries; i++) {
     try {
-      console.log('👤 Getting profile for:', userId);
+      console.log(`👤 Getting profile for: ${userId} (attempt ${i + 1})`);
+      
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
@@ -25,16 +28,27 @@ const AuthProvider = ({ children }) => {
         .single();
 
       if (error) {
-        console.error('❌ Profile error:', error);
+        console.error(`❌ Profile error (attempt ${i + 1}):`, error);
+        
+        // Jika error permission atau connection, retry
+        if (error.code === 'PGRST116' || error.message.includes('connection')) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+          continue;
+        }
         return null;
       }
+      
       console.log('✅ Profile found:', data);
       return data;
     } catch (error) {
-      console.error('❌ Profile fetch error:', error);
-      return null;
+      console.error(`❌ Profile fetch error (attempt ${i + 1}):`, error);
+      
+      if (i === retries - 1) return null;
+      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
     }
-  };
+  }
+  return null;
+};
 
   useEffect(() => {
     let isMounted = true;
