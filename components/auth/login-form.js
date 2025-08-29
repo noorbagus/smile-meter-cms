@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/router';
-import { supabase } from '../../lib/supabase';
+import { createClient } from '../../utils/supabase/client';
 
 const LoginForm = () => {
   const [email, setEmail] = useState('cs@hpm-cyberpark.com');
@@ -8,6 +8,7 @@ const LoginForm = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
+  const supabase = createClient();
 
   const handleSubmit = async (e) => {
     e.preventDefault();

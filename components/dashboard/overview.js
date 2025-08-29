@@ -1,7 +1,7 @@
-// components/dashboard/overview.js - Fixed version
+// components/dashboard/overview.js
 import React, { useState, useEffect } from 'react';
 import { Store, AlertTriangle, Package, Users, TrendingUp, TrendingDown, X } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { createClient } from '../../utils/supabase/client';
 
 const Overview = ({ onUnitSelect, onTabChange }) => {
   const [units, setUnits] = useState([]);
@@ -12,6 +12,7 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
   const [emptyProducts, setEmptyProducts] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const productsPerPage = 4;
+  const supabase = createClient();
 
   useEffect(() => {
     fetchOverviewData();
@@ -364,7 +365,7 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="font-semibold text-gray-900 text-sm truncate">{unit.name}</h3>
-                  <p className="text-xs text-gray-500"></p>
+                  <p className="text-xs text-gray-500">{unit.location}</p>
                 </div>
               </div>
               {getAlertIcon(unit.priority)}
@@ -425,12 +426,10 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
               </span>
             </div>
 
-            {/* Action Button - FIXED */}
+            {/* Action Button */}
             <button 
               onClick={() => {
-                console.log('🎯 Unit selected:', unit.id);
                 onUnitSelect(unit.id);
-                console.log('📋 Tab changed to: stock');
                 onTabChange('stock');
               }}
               className="w-full bg-blue-600 text-white py-2 px-3 rounded-lg text-xs hover:bg-blue-700 transition-colors"

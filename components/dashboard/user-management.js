@@ -1,6 +1,6 @@
 // components/dashboard/user-management.js - Fixed version
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { createClient } from '../../utils/supabase/client';
 
 const UserManagement = ({ user }) => {
   const [units, setUnits] = useState([]);
@@ -13,6 +13,7 @@ const UserManagement = ({ user }) => {
   const [editUser, setEditUser] = useState({ full_name: '', email: '' });
   const [selectedCS, setSelectedCS] = useState('');
   const [loading, setLoading] = useState(true);
+  const supabase = createClient();
 
   useEffect(() => {
     loadData();
@@ -218,7 +219,7 @@ const UserManagement = ({ user }) => {
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h3 className="font-semibold text-gray-900 text-sm">{unit.name}</h3>
-                <p className="text-xs text-gray-500"></p>
+                <p className="text-xs text-gray-500">{unit.location}</p>
               </div>
             </div>
             
@@ -367,7 +368,7 @@ const UserManagement = ({ user }) => {
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-[#2a93ce] text-white rounded-lg hover:bg-[#2485b8]"
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                 >
                   Create Account
                 </button>

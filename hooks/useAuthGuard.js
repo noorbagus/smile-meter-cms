@@ -1,103 +1,57 @@
 // hooks/useAuthGuard.js
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { supabase } from '../lib/supabase';
+import { useAuth } from '../pages/_app';
 
 export const useAuthGuard = (requiredRole = null) => {
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { user, profile, loading, error } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        // Get current session
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('Session error:', error);
-          setLoading(false);
-          return;
-        }
+    // Don't redirect during loading or if there's an error
+    if (loading || error) return;
 
-        if (!session?.user) {
-          // No session, redirect to login unless already there
-          if (router.pathname !== '/login') {
-            router.replace('/login');
-          }
-          setLoading(false);
-          return;
-        }
+    // If no user and not on login page, redirect to login
+    if (!user && router.pathname !== '/login') {
+      console.log('🔒 No user, redirecting to login');
+      router.replace('/login');
+      return;
+    }
 
-        // Get user profile
-        const { data: profileData, error: profileError } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .eq('is_active', true)
-          .single();
+    // If user exists but no profile, stay on current page (loading profile)
+    if (user && !profile) {
+      console.log('👤 User exists but profile loading...');
+      return;
+    }
 
-        if (profileError || !profileData) {
-          console.error('Profile error:', profileError);
-          await supabase.auth.signOut();
-          router.replace('/login');
-          setLoading(false);
-          return;
-        }
-
-        // Check role requirements
-        if (requiredRole && profileData.role !== requiredRole) {
-          console.error('Access denied: insufficient role');
-          
-          // Redirect to appropriate dashboard based on actual role
-          const redirectPath = profileData.role === 'admin' ? '/dashboard' : '/cs-dashboard';
-          if (router.pathname !== redirectPath) {
-            router.replace(redirectPath);
-          }
-          setLoading(false);
-          return;
-        }
-
-        // All checks passed
-        setUser(session.user);
-        setProfile(profileData);
-
-        // Redirect authenticated users away from login page
-        if (router.pathname === '/login') {
-          const dashboardPath = profileData.role === 'admin' ? '/dashboard' : '/cs-dashboard';
-          router.replace(dashboardPath);
-          return;
-        }
-
-      } catch (error) {
-        console.error('Auth check error:', error);
-        router.replace('/login');
-      } finally {
-        setLoading(false);
+    // If user and profile exist, check role and redirect if needed
+    if (user && profile) {
+      // If on login page with valid session, redirect to appropriate dashboard
+      if (router.pathname === '/login') {
+        const targetPath = profile.role === 'admin' ? '/dashboard' : '/cs-dashboard';
+        console.log('✅ Already logged in, redirecting to', targetPath);
+        router.replace(targetPath);
+        return;
       }
-    };
 
-    checkAuth();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_OUT' || !session) {
-          setUser(null);
-          setProfile(null);
-          if (router.pathname !== '/login') {
-            router.replace('/login');
-          }
-        } else if (event === 'SIGNED_IN') {
-          // Refresh the page or re-check auth
-          checkAuth();
-        }
+      // Check role requirement
+      if (requiredRole && profile.role !== requiredRole) {
+        console.log('🚫 Role mismatch, redirecting...');
+        const correctPath = profile.role === 'admin' ? '/dashboard' : '/cs-dashboard';
+        router.replace(correctPath);
+        return;
       }
-    );
+    }
+  }, [user, profile, loading, error, router.pathname, requiredRole]);
 
-    return () => subscription.unsubscribe();
-  }, [router.pathname, requiredRole]);
-
-  return { user, profile, loading };
+  // Return auth state - don't return null/redirect components here
+  // Let the components handle their own loading states
+  return {
+    user,
+    profile,
+    loading: loading && !error, // Don't show loading if there's an error
+    error,
+    isAuthenticated: !!user && !!profile,
+    isAuthorized: !requiredRole || (profile?.role === requiredRole)
+  };
 };

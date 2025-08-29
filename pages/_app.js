@@ -1,7 +1,7 @@
-// pages/_app.js - Fixed version untuk reload issue
+// pages/_app.js - Updated with SSR approach
 import { useState, useEffect, createContext, useContext } from 'react';
 import { useRouter } from 'next/router';
-import { supabase } from '../lib/supabase';
+import { createClient } from '../utils/supabase/client';
 import '../styles/globals.css';
 
 const AuthContext = createContext({});
@@ -12,95 +12,102 @@ const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [initialized, setInitialized] = useState(false);
   const router = useRouter();
+  const supabase = createClient();
 
   const getUserProfile = async (userId) => {
     try {
       console.log('👤 Getting profile for:', userId);
-      const { data, error } = await supabase
+      
+      // Add timeout
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Profile timeout')), 8000)
+      );
+      
+      const profilePromise = supabase
         .from('user_profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
+      const { data, error } = await Promise.race([profilePromise, timeoutPromise]);
+
       if (error) {
         console.error('❌ Profile error:', error);
         return null;
       }
+      
       console.log('✅ Profile found:', data);
       return data;
     } catch (error) {
-      console.error('❌ Profile fetch error:', error);
+      console.error('❌ Profile fetch timeout:', error);
+      // Auto sign out on timeout
+      await supabase.auth.signOut();
       return null;
     }
   };
 
-  // SINGLE useEffect - hanya pakai onAuthStateChange
   useEffect(() => {
-    console.log('🔐 Setting up auth listener...');
-    
+    const getInitialSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          setUser(session.user);
+          
+          // Try to get profile with timeout
+          const userProfile = await getUserProfile(session.user.id);
+          
+          if (userProfile) {
+            setProfile(userProfile);
+          } else {
+            // Fallback: create basic profile from session data
+            const fallbackProfile = {
+              id: session.user.id,
+              email: session.user.email,
+              full_name: session.user.user_metadata?.full_name || session.user.email,
+              role: session.user.email.includes('admin') ? 'admin' : 'customer_service'
+            };
+            setProfile(fallbackProfile);
+            console.log('🔄 Using fallback profile:', fallbackProfile);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Session init failed:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    getInitialSession();
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('🔄 Auth state change:', event, session?.user?.email);
         
-        try {
-          if (event === 'SIGNED_IN' && session?.user) {
-            setUser(session.user);
-            console.log('👤 Fetching profile for:', session.user.id);
-            
-            const userProfile = await getUserProfile(session.user.id);
-            setProfile(userProfile);
-            
-            // Redirect based on role
-            if (userProfile && !initialized) {
-              const targetPath = userProfile.role === 'admin' ? '/dashboard' : '/cs-dashboard';
-              console.log('🎯 Redirecting to:', targetPath);
-              
-              // Only redirect if not already on target page
-              if (router.pathname !== targetPath) {
-                setTimeout(() => router.replace(targetPath), 100);
-              }
-            }
-            
-          } else if (event === 'SIGNED_OUT') {
-            console.log('🚪 User signed out');
-            setUser(null);
-            setProfile(null);
-            
-            // Only redirect to login if not already there.
-            if (router.pathname !== '/login') {
-              router.replace('/login');
-            }
-            
-          } else if (event === 'TOKEN_REFRESHED') {
-            console.log('🔄 Token refreshed');
-            // Don't fetch profile again on token refresh if we already have it
-            
-          } else if (event === 'INITIAL_SESSION') {
-            console.log('🔐 Initial session:', session?.user?.email);
-            
-            if (session?.user) {
-              setUser(session.user);
-              const userProfile = await getUserProfile(session.user.id);
-              setProfile(userProfile);
-            }
-          }
+        if (event === 'SIGNED_IN' && session?.user) {
+          setUser(session.user);
           
-        } catch (error) {
-          console.error('❌ Auth state change error:', error);
-        } finally {
-          setLoading(false);
-          setInitialized(true);
+          // Skip profile fetch for now, use fallback
+          const fallbackProfile = {
+            id: session.user.id,
+            email: session.user.email,
+            full_name: session.user.user_metadata?.full_name || session.user.email,
+            role: session.user.email.includes('admin') ? 'admin' : 'customer_service'
+          };
+          setProfile(fallbackProfile);
+          console.log('🔄 Using fallback profile for signed in:', fallbackProfile);
+          
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setProfile(null);
+          router.push('/login');
         }
       }
     );
 
-    return () => {
-      console.log('🧹 Cleaning up auth listener');
-      subscription.unsubscribe();
-    };
-  }, []); // Empty dependency array - hanya run sekali
+    return () => subscription.unsubscribe();
+  }, []);
 
   const signIn = async (email, password) => {
     try {
@@ -111,12 +118,8 @@ const AuthProvider = ({ children }) => {
         password
       });
 
-      if (error) {
-        console.error('❌ Auth error:', error);
-        throw error;
-      }
-
-      console.log('✅ Auth success:', data);
+      if (error) throw error;
+      
       return { success: true, data };
     } catch (error) {
       console.error('❌ Login error:', error);

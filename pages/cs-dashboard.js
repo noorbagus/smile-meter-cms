@@ -1,7 +1,7 @@
-// pages/cs-dashboard.js - Enhanced with manual input
+// pages/cs-dashboard.js
 import { useState, useEffect } from 'react';
 import { useAuthGuard } from '../hooks/useAuthGuard';
-import { supabase } from '../lib/supabase';
+import { createClient } from '../utils/supabase/client';
 
 const CSDashboard = () => {
   const [userUnit, setUserUnit] = useState(null);
@@ -9,12 +9,12 @@ const CSDashboard = () => {
   const [unitStock, setUnitStock] = useState({});
   const [showConfirmModal, setShowConfirmModal] = useState(null);
   const [dataLoading, setDataLoading] = useState(true);
-  const [reductionAmount, setReductionAmount] = useState('1'); // Change to string for better input handling
-  const [inputErrors, setInputErrors] = useState({});
-  const [searchTerm, setSearchTerm] = useState(''); // Add search functionality
+  const [searchQuery, setSearchQuery] = useState('');
+  const [reductionAmount, setReductionAmount] = useState(1);
 
   // Use auth guard with CS role requirement
   const { user, profile, loading } = useAuthGuard('customer_service');
+  const supabase = createClient();
 
   useEffect(() => {
     if (user && profile && profile.role === 'customer_service') {
@@ -83,67 +83,21 @@ const CSDashboard = () => {
     const currentStock = unitStock[productId] || 0;
     if (currentStock > 0) {
       setShowConfirmModal(productId);
-      setReductionAmount('1'); // Reset to string '1' when opening modal
-      setInputErrors({});
+      setReductionAmount(1);
     }
-  };
-
-  const validateReductionAmount = (amount, currentStock) => {
-    if (amount === 0 || amount === '' || !amount) {
-      return 'Please enter an amount';
-    }
-    if (amount < 1) {
-      return 'Minimum reduction is 1';
-    }
-    if (amount > currentStock) {
-      return `Cannot reduce more than current stock (${currentStock})`;
-    }
-    return null;
-  };
-
-  const handleReductionAmountChange = (value) => {
-    // Allow empty string for better UX when deleting
-    if (value === '') {
-      setReductionAmount('');
-      setInputErrors(prev => ({
-        ...prev,
-        [showConfirmModal]: 'Please enter an amount'
-      }));
-      return;
-    }
-
-    // Only allow numeric input
-    const numericValue = value.replace(/[^0-9]/g, '');
-    
-    // Convert to number, but keep as string to preserve user input
-    const amount = parseInt(numericValue) || 0;
-    const currentStock = unitStock[showConfirmModal] || 0;
-    
-    // Update with the cleaned numeric string
-    setReductionAmount(numericValue);
-    
-    const error = validateReductionAmount(amount, currentStock);
-    setInputErrors(prev => ({
-      ...prev,
-      [showConfirmModal]: error
-    }));
   };
 
   const confirmStockReduce = async (productId) => {
+    const reduction = parseInt(reductionAmount) || 1;
     const currentStock = unitStock[productId] || 0;
-    const amount = parseInt(reductionAmount) || 0;
-    const error = validateReductionAmount(amount, currentStock);
     
-    if (error) {
-      setInputErrors(prev => ({
-        ...prev,
-        [productId]: error
-      }));
+    if (reduction <= 0 || reduction > currentStock) {
+      alert('Invalid reduction amount');
       return;
     }
 
     try {
-      const newQuantity = currentStock - amount;
+      const newQuantity = currentStock - reduction;
 
       await supabase
         .from('unit_stock')
@@ -162,8 +116,8 @@ const CSDashboard = () => {
           transaction_type: 'reduction',
           quantity_before: currentStock,
           quantity_after: newQuantity,
-          quantity_change: -amount,
-          reason: `Prize given out (${amount} items)`,
+          quantity_change: -reduction,
+          reason: 'Prize given out',
           performed_by: user.id
         });
 
@@ -173,8 +127,7 @@ const CSDashboard = () => {
       }));
 
       setShowConfirmModal(null);
-      setReductionAmount('');
-      setInputErrors({});
+      setReductionAmount(1);
     } catch (error) {
       console.error('Error reducing stock:', error);
       alert('Failed to reduce stock');
@@ -183,12 +136,6 @@ const CSDashboard = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-  };
-
-  // Quick reduction buttons
-  const getQuickReductionButtons = (currentStock) => {
-    const buttons = [1, 2, 3, 5];
-    return buttons.filter(num => num <= currentStock);
   };
 
   // Show loading while checking auth or loading data
@@ -206,17 +153,12 @@ const CSDashboard = () => {
   const status = getUnitStatus();
   const totalStock = getTotalStock();
 
-  // Filter products based on search
-  const filteredProducts = products.filter(product => 
-    product.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b sticky top-0 z-30">
         <div className="flex items-center justify-between p-4">
           <div className="text-center flex-1">
-            <h1 className="font-semibold text-gray-900">Stock Manager{userUnit?.name}</h1>
+            <h1 className="font-semibold text-gray-900">Stock Manager {userUnit?.name}</h1>
           </div>
           
           <button 
@@ -254,104 +196,79 @@ const CSDashboard = () => {
       <div className="px-4 pb-4">
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-white rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-blue-600">{filteredProducts.filter(p => (unitStock[p.id] || 0) > 10).length}</div>
+            <div className="text-lg font-bold text-blue-600">{products.filter(p => (unitStock[p.id] || 0) > 10).length}</div>
             <div className="text-xs text-gray-600">High Stock</div>
           </div>
           <div className="bg-white rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-orange-600">{filteredProducts.filter(p => {
+            <div className="text-lg font-bold text-orange-600">{products.filter(p => {
               const stock = unitStock[p.id] || 0;
               return stock > 0 && stock <= 10;
             }).length}</div>
             <div className="text-xs text-gray-600">Low Stock</div>
           </div>
           <div className="bg-white rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-red-600">{filteredProducts.filter(p => (unitStock[p.id] || 0) === 0).length}</div>
+            <div className="text-lg font-bold text-red-600">{products.filter(p => (unitStock[p.id] || 0) === 0).length}</div>
             <div className="text-xs text-gray-600">Out of Stock</div>
           </div>
         </div>
       </div>
 
       <div className="px-4 pb-20">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Products</h2>
+          <span className="text-sm text-gray-500">{products.length} items</span>
+        </div>
+
         <div className="mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-gray-900">Products</h2>
-            <span className="text-sm text-gray-500">{filteredProducts.length} items</span>
-          </div>
-          
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
-            />
-            <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-          </div>
+          <input
+            type="text"
+            placeholder="Search products..."
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
 
         <div className="space-y-3">
-          {filteredProducts.length > 0 ? (
-            filteredProducts.map(product => {
-              const stock = unitStock[product.id] || 0;
-              return (
-                <div key={product.id} className="bg-white rounded-lg shadow-sm border">
-                  <div className="p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-gray-900 truncate">{product.name}</h3>
-                      </div>
-                      <div className="ml-4 flex-shrink-0 text-right">
-                        <div className={`text-2xl font-bold ${
-                          stock > 10 ? 'text-green-600' : 
-                          stock > 0 ? 'text-orange-600' : 'text-red-600'
-                        }`}>
-                          {stock}
-                        </div>
-                        <div className="text-xs text-gray-500">in stock</div>
-                      </div>
+          {products.filter(product => 
+            product.name.toLowerCase().includes(searchQuery.toLowerCase())
+          ).map(product => {
+            const stock = unitStock[product.id] || 0;
+            return (
+              <div key={product.id} className="bg-white rounded-lg shadow-sm border">
+                <div className="p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-gray-900 truncate">{product.name}</h3>
                     </div>
-
-                    <button 
-                      onClick={() => handleStockReduce(product.id)}
-                      disabled={stock === 0}
-                      className={`w-full py-3 rounded-lg font-medium transition-all ${
-                        stock > 0 
-                          ? 'bg-red-500 text-white hover:bg-red-600 active:bg-red-700 shadow-sm' 
-                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      }`}
-                    >
-                      <div className="flex items-center justify-center gap-2">
-                        <span>{stock > 0 ? 'Reduce Stock' : 'Out of Stock'}</span>
+                    <div className="ml-4 flex-shrink-0 text-right">
+                      <div className={`text-2xl font-bold ${
+                        stock > 10 ? 'text-green-600' : 
+                        stock > 0 ? 'text-orange-600' : 'text-red-600'
+                      }`}>
+                        {stock}
                       </div>
-                    </button>
+                      <div className="text-xs text-gray-500">in stock</div>
+                    </div>
                   </div>
+
+                  <button 
+                    onClick={() => handleStockReduce(product.id)}
+                    disabled={stock === 0}
+                    className={`w-full py-3 rounded-lg font-medium transition-all ${
+                      stock > 0 
+                        ? 'bg-red-500 text-white hover:bg-red-600 active:bg-red-700 shadow-sm' 
+                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      <span>{stock > 0 ? 'Reduce Stock' : 'Out of Stock'}</span>
+                    </div>
+                  </button>
                 </div>
-              );
-            })
-          ) : (
-            <div className="text-center py-8">
-              <div className="text-gray-400 mb-2">
-                <svg className="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
               </div>
-              <p className="text-gray-500">No products found</p>
-              <p className="text-sm text-gray-400">Try adjusting your search</p>
-            </div>
-          )}
+            );
+          })}
         </div>
       </div>
 
@@ -368,44 +285,39 @@ const CSDashboard = () => {
               </h3>
               
               <p className="text-gray-600 mb-4 text-sm">
-                <span className="font-medium">"{products.find(p => p.id === showConfirmModal)?.name}"</span><br />
-                Current stock: {unitStock[showConfirmModal] || 0}
+                How many items to reduce for<br />
+                <span className="font-medium">"{products.find(p => p.id === showConfirmModal)?.name}"</span>?
               </p>
-
-             
-
-              {/* Manual input */}
+              
               <div className="mb-6">
-                <label className="block text-xs text-gray-500 mb-2">
-                  Enter amount to reduce
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Reduction Amount
                 </label>
                 <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
+                  type="number"
+                  min="1"
+                  max={unitStock[showConfirmModal] || 1}
                   value={reductionAmount}
-                  onChange={(e) => handleReductionAmountChange(e.target.value)}
-                  className={`w-full px-3 py-3 border rounded-xl text-center text-lg font-semibold focus:ring-2 focus:ring-red-500 focus:border-transparent ${
-                    inputErrors[showConfirmModal] 
-                      ? 'border-red-500 bg-red-50' 
-                      : 'border-gray-300'
-                  }`}
-                  placeholder="Enter amount"
-                  autoComplete="off"
+                  onChange={(e) => setReductionAmount(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Delete' || e.key === 'Backspace') {
+                      e.preventDefault();
+                      setReductionAmount('');
+                    }
+                  }}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-2xl text-center text-lg font-medium focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  autoFocus
                 />
-                {inputErrors[showConfirmModal] && (
-                  <p className="text-red-600 text-xs mt-2">
-                    {inputErrors[showConfirmModal]}
-                  </p>
-                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Current stock: {unitStock[showConfirmModal]} items
+                </p>
               </div>
               
               <div className="flex gap-3">
                 <button 
                   onClick={() => {
                     setShowConfirmModal(null);
-                    setReductionAmount('1');
-                    setInputErrors({});
+                    setReductionAmount(1);
                   }}
                   className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 font-medium"
                 >
@@ -413,10 +325,10 @@ const CSDashboard = () => {
                 </button>
                 <button 
                   onClick={() => confirmStockReduce(showConfirmModal)}
-                  disabled={!!inputErrors[showConfirmModal] || !reductionAmount || reductionAmount === '0'}
-                  className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!reductionAmount || reductionAmount <= 0 || reductionAmount > (unitStock[showConfirmModal] || 0)}
+                  className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
-                  Reduce by {parseInt(reductionAmount) || 0}
+                  Reduce
                 </button>
               </div>
             </div>
