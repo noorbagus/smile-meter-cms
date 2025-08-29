@@ -216,8 +216,7 @@ const CSDashboard = () => {
       <header className="bg-white shadow-sm border-b sticky top-0 z-30">
         <div className="flex items-center justify-between p-4">
           <div className="text-center flex-1">
-            <h1 className="font-semibold text-gray-900">Stock Manager</h1>
-            <p className="text-xs text-gray-500 truncate">{userUnit?.name}</p>
+            <h1 className="font-semibold text-gray-900">Stock Manager{userUnit?.name}</h1>
           </div>
           
           <button 
@@ -373,30 +372,12 @@ const CSDashboard = () => {
                 Current stock: {unitStock[showConfirmModal] || 0}
               </p>
 
-              {/* Quick buttons */}
-              <div className="mb-4">
-                <p className="text-xs text-gray-500 mb-2">Quick reduce:</p>
-                <div className="flex justify-center gap-2">
-                  {getQuickReductionButtons(unitStock[showConfirmModal] || 0).map(num => (
-                    <button
-                      key={num}
-                      onClick={() => handleReductionAmountChange(num.toString())}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                        parseInt(reductionAmount) === num
-                          ? 'bg-red-500 text-white border-red-500'
-                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      {num}
-                    </button>
-                  ))}
-                </div>
-              </div>
+             
 
               {/* Manual input */}
               <div className="mb-6">
                 <label className="block text-xs text-gray-500 mb-2">
-                  Or enter amount:
+                  Enter amount to reduce
                 </label>
                 <input
                   type="text"
