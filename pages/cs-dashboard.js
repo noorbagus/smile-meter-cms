@@ -140,7 +140,21 @@ const CSDashboard = () => {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    try {
+      console.log('🚪 Logging out...');
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Logout error:', error);
+      }
+      // Force redirect as backup
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 500);
+    } catch (error) {
+      console.error('Logout failed:', error);
+      // Force redirect on error
+      window.location.href = '/login';
+    }
   };
 
   // Show loading while checking auth or loading data

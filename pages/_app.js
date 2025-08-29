@@ -1,4 +1,4 @@
-// pages/_app.js - Fixed logout redirect issue
+// pages/_app.js - Fixed with clear state logout
 import { useState, useEffect, createContext, useContext } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
@@ -12,15 +12,11 @@ const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isSigningOut, setIsSigningOut] = useState(false);
   const router = useRouter();
 
-// Fix untuk _app.js - tambahkan timeout dan retry
-const getUserProfile = async (userId, retries = 3) => {
-  for (let i = 0; i < retries; i++) {
+  const getUserProfile = async (userId) => {
     try {
-      console.log(`👤 Getting profile for: ${userId} (attempt ${i + 1})`);
-      
+      console.log('👤 Getting profile for:', userId);
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
@@ -28,89 +24,59 @@ const getUserProfile = async (userId, retries = 3) => {
         .single();
 
       if (error) {
-        console.error(`❌ Profile error (attempt ${i + 1}):`, error);
-        
-        // Jika error permission atau connection, retry
-        if (error.code === 'PGRST116' || error.message.includes('connection')) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
-          continue;
-        }
+        console.error('❌ Profile error:', error);
         return null;
       }
-      
       console.log('✅ Profile found:', data);
       return data;
     } catch (error) {
-      console.error(`❌ Profile fetch error (attempt ${i + 1}):`, error);
-      
-      if (i === retries - 1) return null;
-      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+      console.error('❌ Profile fetch error:', error);
+      return null;
     }
-  }
-  return null;
-};
+  };
 
   useEffect(() => {
-    let isMounted = true;
-    
     const initAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         console.log('🔐 Initial session:', session);
         
-        if (session?.user && !isSigningOut && isMounted) {
+        if (session?.user) {
           setUser(session.user);
           const userProfile = await getUserProfile(session.user.id);
-          if (isMounted) {
-            setProfile(userProfile);
-          }
+          setProfile(userProfile);
         }
       } catch (error) {
         console.error('❌ Auth init error:', error);
       } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+        setLoading(false);
       }
     };
 
     initAuth();
-    
-    return () => {
-      isMounted = false;
-    };
 
-  }, []);
-
-  useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('🔄 Auth state change:', event, session?.user?.email);
         
-        if (event === 'SIGNED_IN' && session?.user && !isSigningOut) {
+        if (event === 'SIGNED_IN' && session?.user) {
           setUser(session.user);
           const userProfile = await getUserProfile(session.user.id);
           setProfile(userProfile);
-          // Don't redirect here - let signIn handle it
         } else if (event === 'SIGNED_OUT') {
-          console.log('🚪 User signed out, clearing state and redirecting to login');
           setUser(null);
           setProfile(null);
-          setIsSigningOut(false);
-          
-          // Force redirect to login
-          window.location.href = '/login';
+          router.push('/login');
         }
       }
     );
 
     return () => subscription.unsubscribe();
-  }, [isSigningOut, router]);
+  }, []);
 
   const signIn = async (email, password) => {
     try {
       console.log('🔐 Starting login:', email);
-      setIsSigningOut(false); // Reset signing out state
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -133,7 +99,6 @@ const getUserProfile = async (userId, retries = 3) => {
           setProfile(profile);
           
           console.log('🎯 Redirecting based on role:', profile.role);
-          // Force redirect without waiting for auth state change
           setTimeout(() => {
             if (profile.role === 'admin') {
               window.location.href = '/dashboard';
@@ -157,18 +122,45 @@ const getUserProfile = async (userId, retries = 3) => {
   };
 
   const signOut = async () => {
-    console.log('🚪 Starting sign out process');
-    setIsSigningOut(true); // Set signing out flag first
-    
     try {
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error('❌ Sign out error:', error);
-      // Even if sign out fails, clear local state and redirect
+      console.log('🚪 Starting logout...');
+      
+      // Clear local state immediately
       setUser(null);
       setProfile(null);
-      setIsSigningOut(false);
-      router.push('/login');
+      
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('❌ Logout error:', error);
+      }
+      
+      // Clear any remaining browser session data
+      if (typeof window !== 'undefined') {
+        // Clear localStorage
+        Object.keys(localStorage).forEach(key => {
+          if (key.includes('supabase') || key.includes('auth')) {
+            localStorage.removeItem(key);
+          }
+        });
+        
+        // Clear sessionStorage
+        Object.keys(sessionStorage).forEach(key => {
+          if (key.includes('supabase') || key.includes('auth')) {
+            sessionStorage.removeItem(key);
+          }
+        });
+      }
+      
+      console.log('✅ State cleared, redirecting...');
+      
+      // Force full page reload to login
+      window.location.href = '/login';
+      
+    } catch (error) {
+      console.error('❌ Logout failed:', error);
+      // Force redirect even if logout fails
+      window.location.href = '/login';
     }
   };
 
