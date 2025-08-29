@@ -1,4 +1,4 @@
-// components/dashboard/stock-table.js - Enhanced with search
+// components/dashboard/stock-table.js - FIXED VERSION with Search
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 
@@ -8,6 +8,7 @@ const StockTable = ({ selectedUnit, user, units = [], onUnitChange }) => {
   const [editingStock, setEditingStock] = useState({});
   const [tempStockValues, setTempStockValues] = useState({});
   const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const productsPerPage = 5;
@@ -67,24 +68,37 @@ const StockTable = ({ selectedUnit, user, units = [], onUnitChange }) => {
 
   const handleStockSave = async (productId) => {
     const key = productId;
-    const newQuantity = parseInt(tempStockValues[key]) || 0;
+    const newQuantity = parseInt(tempStockValues[key]);
     const oldQuantity = unitStock[productId] || 0;
 
+    // Validation
+    if (isNaN(newQuantity) || newQuantity < 0) {
+      alert('Please enter a valid quantity (0 or greater)');
+      return;
+    }
+
+    // Set updating state to prevent multiple clicks
+    setUpdating(prev => ({ ...prev, [key]: true }));
+
     try {
-      // Update or insert stock
-      const { error } = await supabase
+      // FIXED: Proper upsert with conflict resolution
+      const { error: upsertError } = await supabase
         .from('unit_stock')
         .upsert({
           unit_id: selectedUnit,
           product_id: productId,
           quantity: newQuantity,
-          last_updated_by: user.id
+          last_updated_by: user.id,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'unit_id,product_id',
+          ignoreDuplicates: false
         });
 
-      if (error) throw error;
+      if (upsertError) throw upsertError;
 
       // Log transaction
-      await supabase
+      const { error: transactionError } = await supabase
         .from('stock_transactions')
         .insert({
           unit_id: selectedUnit,
@@ -97,17 +111,77 @@ const StockTable = ({ selectedUnit, user, units = [], onUnitChange }) => {
           performed_by: user.id
         });
 
+      if (transactionError) {
+        console.warn('Failed to log transaction:', transactionError);
+        // Don't fail the whole operation for transaction log error
+      }
+
+      // Update unit status
+      await updateUnitStatus();
+
+      // Update local state
       setUnitStock(prev => ({ ...prev, [productId]: newQuantity }));
       setEditingStock({ ...editingStock, [key]: false });
+      
+      // Show success message
+      console.log(`Stock updated successfully: ${oldQuantity} → ${newQuantity}`);
+      
     } catch (error) {
       console.error('Error updating stock:', error);
-      alert('Failed to update stock');
+      
+      // Show user-friendly error message
+      let errorMessage = 'Failed to update stock. ';
+      if (error.message.includes('constraint')) {
+        errorMessage += 'Database constraint error. Please try again.';
+      } else if (error.message.includes('network')) {
+        errorMessage += 'Network error. Please check your connection.';
+      } else {
+        errorMessage += error.message;
+      }
+      
+      alert(errorMessage);
+    } finally {
+      setUpdating(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const updateUnitStatus = async () => {
+    if (!selectedUnit) return;
+
+    try {
+      const totalStock = Object.values(unitStock).reduce((sum, qty) => sum + qty, 0);
+      const emptyProducts = Object.values(unitStock).filter(qty => qty === 0).length;
+      const criticalProducts = Object.values(unitStock).filter(qty => qty > 0 && qty <= 5).length;
+
+      let status = 'available';
+      if (totalStock === 0) {
+        status = 'empty';
+      } else if (totalStock <= 5 || emptyProducts >= 2 || criticalProducts >= 2) {
+        status = 'critical';
+      }
+
+      await supabase
+        .from('unit_status')
+        .upsert({
+          unit_id: selectedUnit,
+          status,
+          total_stock: totalStock,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'unit_id',
+          ignoreDuplicates: false
+        });
+    } catch (error) {
+      console.error('Error updating unit status:', error);
+      // Don't fail the main operation
     }
   };
 
   const handleStockCancel = (productId) => {
     const key = productId;
     setEditingStock({ ...editingStock, [key]: false });
+    // Reset temp value to current value
+    setTempStockValues({ ...tempStockValues, [key]: unitStock[productId] || 0 });
   };
 
   const getStockStats = () => {
@@ -320,6 +394,7 @@ const StockTable = ({ selectedUnit, user, units = [], onUnitChange }) => {
                   {paginatedProducts.map(product => {
                     const currentStock = unitStock[product.id] || 0;
                     const isEditing = editingStock[product.id];
+                    const isUpdating = updating[product.id];
                     
                     return (
                       <tr key={product.id} className="hover:bg-gray-50">
@@ -339,18 +414,25 @@ const StockTable = ({ selectedUnit, user, units = [], onUnitChange }) => {
                                   ...tempStockValues,
                                   [product.id]: e.target.value
                                 })}
-                                className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                                className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
                                 min="0"
+                                disabled={isUpdating}
                               />
                               <button
                                 onClick={() => handleStockSave(product.id)}
-                                className="text-green-600 hover:text-green-700"
+                                disabled={isUpdating}
+                                className="text-green-600 hover:text-green-700 disabled:opacity-50 flex items-center justify-center w-6 h-6"
                               >
-                                ✓
+                                {isUpdating ? (
+                                  <div className="animate-spin h-3 w-3 border border-green-600 border-t-transparent rounded-full"></div>
+                                ) : (
+                                  '✓'
+                                )}
                               </button>
                               <button
                                 onClick={() => handleStockCancel(product.id)}
-                                className="text-red-600 hover:text-red-700"
+                                disabled={isUpdating}
+                                className="text-red-600 hover:text-red-700 disabled:opacity-50 flex items-center justify-center w-6 h-6"
                               >
                                 ✕
                               </button>
@@ -376,8 +458,8 @@ const StockTable = ({ selectedUnit, user, units = [], onUnitChange }) => {
                           <div className="flex gap-2">
                             <button 
                               onClick={() => handleStockEdit(product.id, currentStock)}
-                              className="text-gray-600 hover:text-gray-900"
-                              disabled={isEditing}
+                              disabled={isEditing || isUpdating}
+                              className="text-gray-600 hover:text-gray-900 disabled:opacity-50"
                             >
                               ✏️
                             </button>
