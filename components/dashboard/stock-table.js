@@ -287,7 +287,7 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
               <option value="">Select unit</option>
               {units.map(unit => (
                 <option key={unit.id} value={unit.id}>
-                  {unit.name} - {unit.location}
+                  {unit.name}
                 </option>
               ))}
             </select>
