@@ -19,6 +19,10 @@ const Dashboard = () => {
     setSelectedUnit(unitId);
   };
 
+  const handleUnitChange = (unitId) => {
+    setSelectedUnit(unitId);
+  };
+
   const handleTabChange = (tab) => {
     setActiveTab(tab);
   };
@@ -122,7 +126,11 @@ const Dashboard = () => {
                 <p className="text-gray-600">Manage product inventory across units</p>
               </div>
             </div>
-            <StockTable selectedUnit={selectedUnit} user={user} />
+            <StockTable 
+              selectedUnit={selectedUnit} 
+              user={user} 
+              onUnitChange={handleUnitChange}
+            />
           </div>
         )}
 
