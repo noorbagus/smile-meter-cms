@@ -21,36 +21,34 @@ const StockTable = ({ selectedUnit, user }) => {
     if (!selectedUnit) return;
 
     try {
-      // Use Promise.all to fetch all data in parallel
-      const [productsData, stockData, reductionsData] = await Promise.all([
-        supabase
-          .from('products')
-          .select('*')
-          .eq('is_active', true)
-          .order('name'),
+      const { data: productsData } = await supabase
+        .from('products')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
 
-        supabase
-          .from('unit_stock')
-          .select('product_id, quantity')
-          .eq('unit_id', selectedUnit),
-          
-        supabase
-          .from('stock_transactions')
-          .select('quantity_change')
-          .eq('unit_id', selectedUnit)
-          .or('transaction_type.eq.reduction,reason.ilike.%given out%')
-      ]);
+      const { data: stockData } = await supabase
+        .from('unit_stock')
+        .select('product_id, quantity')
+        .eq('unit_id', selectedUnit);
+
+      // New query for getting reduction data
+      const { data: reductionsData } = await supabase
+        .from('stock_transactions')
+        .select('quantity_change')
+        .eq('unit_id', selectedUnit)
+        .or('transaction_type.eq.reduction,reason.ilike.%given out%');
 
       const stockMap = {};
-      stockData.data?.forEach(item => {
+      stockData?.forEach(item => {
         stockMap[item.product_id] = item.quantity || 0;
       });
 
       // Calculate total reduced
-      const totalReducedAmount = reductionsData.data?.reduce((sum, tx) => 
+      const totalReducedAmount = reductionsData?.reduce((sum, tx) => 
         sum + Math.abs(tx.quantity_change || 0), 0) || 0;
 
-      setProducts(productsData.data || []);
+      setProducts(productsData || []);
       setUnitStock(stockMap);
       setTotalReduced(totalReducedAmount);
     } catch (error) {
