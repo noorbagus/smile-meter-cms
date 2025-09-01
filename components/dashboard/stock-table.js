@@ -11,6 +11,7 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [units, setUnits] = useState([]);
   const [currentUnitName, setCurrentUnitName] = useState('');
+  const [totalStock, setTotalStock] = useState(0);
   const productsPerPage = 5;
   const supabase = createClient();
 
@@ -18,6 +19,12 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
     loadUnits();
     loadStockData();
   }, [selectedUnit]);
+
+  // Calculate total stock whenever unitStock changes
+  useEffect(() => {
+    const total = Object.values(unitStock).reduce((sum, qty) => sum + qty, 0);
+    setTotalStock(total);
+  }, [unitStock]);
 
   const loadUnits = async () => {
     try {
@@ -174,6 +181,12 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
     }
   };
 
+  const getStockStatusColor = (total) => {
+    if (total === 0) return 'text-red-600';
+    if (total < 10) return 'text-yellow-600';
+    return 'text-green-600';
+  };
+
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow-sm p-6">
@@ -194,6 +207,11 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
     (currentPage - 1) * productsPerPage,
     currentPage * productsPerPage
   );
+
+  // Calculate stock stats
+  const availableProducts = Object.values(unitStock).filter(qty => qty > 0).length;
+  const criticalProducts = Object.values(unitStock).filter(qty => qty > 0 && qty <= 5).length;
+  const emptyProducts = Object.values(unitStock).filter(qty => qty === 0).length;
 
   return (
     <>
@@ -217,6 +235,37 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
                 </option>
               ))}
             </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Stock Summary */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-3">Stock Summary</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <span className="text-sm text-gray-500">Total Stock</span>
+            <div className={`text-2xl font-bold ${getStockStatusColor(totalStock)}`}>
+              {totalStock}
+            </div>
+          </div>
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <span className="text-sm text-gray-500">Available Products</span>
+            <div className="text-2xl font-bold text-green-600">
+              {availableProducts}
+            </div>
+          </div>
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <span className="text-sm text-gray-500">Critical Stock</span>
+            <div className="text-2xl font-bold text-yellow-600">
+              {criticalProducts}
+            </div>
+          </div>
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <span className="text-sm text-gray-500">Empty Products</span>
+            <div className="text-2xl font-bold text-red-600">
+              {emptyProducts}
+            </div>
           </div>
         </div>
       </div>
