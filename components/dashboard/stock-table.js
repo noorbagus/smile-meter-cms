@@ -59,6 +59,8 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
     if (!selectedUnit) return;
     
     try {
+      console.log("Load total reduced called, filters:", { startDate, endDate });
+      
       let query = supabase
         .from('stock_transactions')
         .select('quantity_change, created_at')
@@ -74,12 +76,14 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
         query = query.lte('created_at', `${endDate}T23:59:59`);
       }
       
+      console.log("Query built:", query.toString());
+      
       const { data, error } = await query;
       
       if (error) throw error;
       
       console.log("Date filter:", startDate, endDate);
-      console.log("Filtered transactions:", data);
+      console.log("Filtered transactions:", data?.length || 0, "records found");
       
       // Sum all the negative quantity changes (reductions)
       const totalReduced = data?.reduce((sum, transaction) => {
@@ -135,7 +139,11 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
     setStartDate('');
     setEndDate('');
     setFilterActive(false);
-    loadTotalReduced();
+    
+    // Force reload total reduced without filters
+    setTimeout(() => {
+      loadTotalReduced();
+    }, 100);
   };
 
   const handleStockEdit = (productId, currentValue) => {
