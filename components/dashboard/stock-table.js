@@ -1,6 +1,7 @@
 // components/dashboard/stock-table.js
 import { useState, useEffect } from 'react';
 import { createClient } from '../../utils/supabase/client';
+import { Search } from 'lucide-react';
 
 const StockTable = ({ selectedUnit, user, onUnitChange }) => {
   const [products, setProducts] = useState([]);
@@ -13,8 +14,10 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
   const [currentUnitName, setCurrentUnitName] = useState('');
   const [totalStock, setTotalStock] = useState(0);
   const [totalReduced, setTotalReduced] = useState(0);
-  const [startDate, setStartDate] = useState(''); // New state for date filter
-  const [endDate, setEndDate] = useState(''); // New state for date filter
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterActive, setFilterActive] = useState(false);
   const productsPerPage = 5;
   const supabase = createClient();
 
@@ -24,7 +27,7 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
     if (selectedUnit) {
       loadTotalReduced();
     }
-  }, [selectedUnit, startDate, endDate]); // Date filters added as dependencies
+  }, [selectedUnit]);
 
   // Calculate total stock whenever unitStock changes
   useEffect(() => {
@@ -72,14 +75,18 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
       }
       
       const { data, error } = await query;
-        
+      
       if (error) throw error;
+      
+      console.log("Date filter:", startDate, endDate);
+      console.log("Filtered transactions:", data);
       
       // Sum all the negative quantity changes (reductions)
       const totalReduced = data?.reduce((sum, transaction) => {
         return sum + Math.abs(transaction.quantity_change);
       }, 0) || 0;
       
+      console.log("Total reduced:", totalReduced);
       setTotalReduced(totalReduced);
     } catch (error) {
       console.error('Error loading total reduced:', error);
@@ -120,12 +127,15 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
   };
 
   const handleDateChange = () => {
+    setFilterActive(true);
     loadTotalReduced();
   };
 
   const clearDateFilters = () => {
     setStartDate('');
     setEndDate('');
+    setFilterActive(false);
+    loadTotalReduced();
   };
 
   const handleStockEdit = (productId, currentValue) => {
@@ -258,8 +268,13 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
     );
   }
 
-  const totalPages = Math.ceil(products.length / productsPerPage);
-  const paginatedProducts = products.slice(
+  // Filter products based on search query
+  const filteredProducts = products.filter(product => 
+    product.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const totalPages = Math.ceil(filteredProducts.length / productsPerPage);
+  const paginatedProducts = filteredProducts.slice(
     (currentPage - 1) * productsPerPage,
     currentPage * productsPerPage
   );
@@ -271,18 +286,18 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
 
   return (
     <>
-      {/* Title and Unit Dropdown */}
+      {/* Improved Title and Controls Bar */}
       <div className="bg-white p-4 rounded-lg shadow-sm border mb-4">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Store: {currentUnitName}</h2>
-            <p className="text-sm text-gray-500">Manage product inventory</p>
-          </div>
-          <div>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Store:</h2>
+              <p className="text-sm text-gray-500">Manage inventory</p>
+            </div>
             <select 
               value={selectedUnit}
               onChange={(e) => onUnitChange(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 w-full sm:w-64"
+              className="border border-gray-300 rounded-lg px-3 py-2 w-64"
             >
               <option value="">Select unit</option>
               {units.map(unit => (
@@ -292,48 +307,43 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
               ))}
             </select>
           </div>
-        </div>
-      </div>
-
-      {/* Date Filter */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border mb-4">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Filter Total Reduced By Date</h3>
-        <div className="flex flex-wrap items-end gap-4">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+          
+          {/* Date Filters - Now inline */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="text-sm font-medium text-gray-700">Filter Reduced:</div>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-36"
+              placeholder="Start Date"
             />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">End Date</label>
+            <span className="text-gray-500">to</span>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-36"
+              placeholder="End Date"
             />
-          </div>
-          <div className="flex gap-2">
             <button
               onClick={handleDateChange}
-              className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700"
+              className="bg-blue-600 text-white px-2 py-1 rounded-lg text-sm hover:bg-blue-700"
             >
-              Apply Filter
+              Apply
             </button>
             <button
               onClick={clearDateFilters}
-              className="bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-300"
+              className="bg-gray-200 text-gray-700 px-2 py-1 rounded-lg text-sm hover:bg-gray-300"
             >
               Clear
             </button>
           </div>
         </div>
-        {(startDate || endDate) && (
-          <div className="mt-2 text-xs text-blue-600">
+        
+        {/* Active filter indicator */}
+        {filterActive && (startDate || endDate) && (
+          <div className="mt-2 text-xs text-blue-600 bg-blue-50 p-1 rounded inline-block">
             {startDate && endDate 
               ? `Showing reductions from ${startDate} to ${endDate}` 
               : startDate 
@@ -380,12 +390,24 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
         </div>
       </div>
 
-      {/* Stock Table */}
+      {/* Improved Stock Table with Search */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">
-            Product Stock - {products.length} items
-          </h3>
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-gray-900">
+              Product Stock - {products.length} items
+            </h3>
+            <div className="relative w-64">
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+            </div>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -487,7 +509,8 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
             <div className="flex items-center justify-between">
               <div className="text-sm text-gray-500">
                 Showing {((currentPage - 1) * productsPerPage) + 1} to{' '}
-                {Math.min(currentPage * productsPerPage, products.length)} of {products.length} products
+                {Math.min(currentPage * productsPerPage, filteredProducts.length)} of {filteredProducts.length} products
+                {searchQuery && products.length !== filteredProducts.length && ` (filtered from ${products.length})`}
               </div>
               <div className="flex gap-2">
                 <button
