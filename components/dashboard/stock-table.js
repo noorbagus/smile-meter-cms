@@ -13,30 +13,40 @@ const StockTable = ({ selectedUnit, user }) => {
   const supabase = createClient();
 
   useEffect(() => {
-    loadStockData();
+    if (selectedUnit) {
+      loadStockData();
+    } else {
+      // If no unit is selected, we're not loading anything
+      setLoading(false);
+    }
   }, [selectedUnit]);
 
   const loadStockData = async () => {
-    if (!selectedUnit) return;
+    if (!selectedUnit) {
+      setLoading(false);
+      return;
+    }
 
+    setLoading(true);
     try {
-      const { data: productsData } = await supabase
-        .from('products')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-
-      const { data: stockData } = await supabase
-        .from('unit_stock')
-        .select('product_id, quantity')
-        .eq('unit_id', selectedUnit);
+      const [productsResponse, stockResponse] = await Promise.all([
+        supabase
+          .from('products')
+          .select('*')
+          .eq('is_active', true)
+          .order('name'),
+        supabase
+          .from('unit_stock')
+          .select('product_id, quantity')
+          .eq('unit_id', selectedUnit)
+      ]);
 
       const stockMap = {};
-      stockData?.forEach(item => {
+      stockResponse.data?.forEach(item => {
         stockMap[item.product_id] = item.quantity || 0;
       });
 
-      setProducts(productsData || []);
+      setProducts(productsResponse.data || []);
       setUnitStock(stockMap);
     } catch (error) {
       console.error('Error loading stock data:', error);
@@ -164,6 +174,15 @@ const StockTable = ({ selectedUnit, user }) => {
     );
   }
 
+  // If no unit is selected, show a message
+  if (!selectedUnit) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm p-6 text-center">
+        <p className="text-gray-500">Please select a unit to view stock</p>
+      </div>
+    );
+  }
+
   const totalPages = Math.ceil(products.length / productsPerPage);
   const paginatedProducts = products.slice(
     (currentPage - 1) * productsPerPage,
@@ -194,72 +213,80 @@ const StockTable = ({ selectedUnit, user }) => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {paginatedProducts.map(product => {
-              const currentStock = unitStock[product.id] || 0;
-              const isEditing = editingStock[product.id];
-              
-              return (
-                <tr key={product.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <div className="font-medium text-gray-900">{product.name}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    {isEditing ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          value={tempStockValues[product.id] || ''}
-                          onChange={(e) => setTempStockValues({
-                            ...tempStockValues,
-                            [product.id]: e.target.value
-                          })}
-                          className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-                          min="0"
-                        />
-                        <button
-                          onClick={() => handleStockSave(product.id)}
-                          className="text-green-600 hover:text-green-700"
-                        >
-                          ✓
-                        </button>
-                        <button
-                          onClick={() => handleStockCancel(product.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-1 rounded-full text-sm font-medium ${
-                          currentStock > 10 ? 'bg-green-100 text-green-800' :
-                          currentStock > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                          {currentStock}
-                        </span>
-                        <button
+            {paginatedProducts.length > 0 ? (
+              paginatedProducts.map(product => {
+                const currentStock = unitStock[product.id] || 0;
+                const isEditing = editingStock[product.id];
+                
+                return (
+                  <tr key={product.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div className="font-medium text-gray-900">{product.name}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {isEditing ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={tempStockValues[product.id] || ''}
+                            onChange={(e) => setTempStockValues({
+                              ...tempStockValues,
+                              [product.id]: e.target.value
+                            })}
+                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                            min="0"
+                          />
+                          <button
+                            onClick={() => handleStockSave(product.id)}
+                            className="text-green-600 hover:text-green-700"
+                          >
+                            ✓
+                          </button>
+                          <button
+                            onClick={() => handleStockCancel(product.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded-full text-sm font-medium ${
+                            currentStock > 10 ? 'bg-green-100 text-green-800' :
+                            currentStock > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {currentStock}
+                          </span>
+                          <button
+                            onClick={() => handleStockEdit(product.id, currentStock)}
+                            className="text-blue-600 hover:text-blue-700 text-sm"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex gap-2">
+                        <button 
                           onClick={() => handleStockEdit(product.id, currentStock)}
-                          className="text-blue-600 hover:text-blue-700 text-sm"
+                          className="text-gray-600 hover:text-gray-900"
+                          disabled={isEditing}
                         >
-                          Edit
+                          ✏️
                         </button>
                       </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => handleStockEdit(product.id, currentStock)}
-                        className="text-gray-600 hover:text-gray-900"
-                        disabled={isEditing}
-                      >
-                        ✏️
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
+                    </td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td colSpan="3" className="px-6 py-4 text-center text-gray-500">
+                  No products found
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
