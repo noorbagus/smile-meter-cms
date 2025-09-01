@@ -12,7 +12,9 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
   const [units, setUnits] = useState([]);
   const [currentUnitName, setCurrentUnitName] = useState('');
   const [totalStock, setTotalStock] = useState(0);
-  const [totalReduced, setTotalReduced] = useState(0); // New state for total reduced
+  const [totalReduced, setTotalReduced] = useState(0);
+  const [startDate, setStartDate] = useState(''); // New state for date filter
+  const [endDate, setEndDate] = useState(''); // New state for date filter
   const productsPerPage = 5;
   const supabase = createClient();
 
@@ -22,7 +24,7 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
     if (selectedUnit) {
       loadTotalReduced();
     }
-  }, [selectedUnit]);
+  }, [selectedUnit, startDate, endDate]); // Date filters added as dependencies
 
   // Calculate total stock whenever unitStock changes
   useEffect(() => {
@@ -49,16 +51,27 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
     }
   };
 
-  // New function to load total reduced
+  // Modified to include date filtering
   const loadTotalReduced = async () => {
     if (!selectedUnit) return;
     
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('stock_transactions')
-        .select('quantity_change')
+        .select('quantity_change, created_at')
         .eq('unit_id', selectedUnit)
         .eq('transaction_type', 'reduction');
+      
+      // Apply date filters if they exist
+      if (startDate) {
+        query = query.gte('created_at', `${startDate}T00:00:00`);
+      }
+      
+      if (endDate) {
+        query = query.lte('created_at', `${endDate}T23:59:59`);
+      }
+      
+      const { data, error } = await query;
         
       if (error) throw error;
       
@@ -104,6 +117,15 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDateChange = () => {
+    loadTotalReduced();
+  };
+
+  const clearDateFilters = () => {
+    setStartDate('');
+    setEndDate('');
   };
 
   const handleStockEdit = (productId, currentValue) => {
@@ -271,6 +293,54 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
             </select>
           </div>
         </div>
+      </div>
+
+      {/* Date Filter */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border mb-4">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Filter Total Reduced By Date</h3>
+        <div className="flex flex-wrap items-end gap-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">End Date</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleDateChange}
+              className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700"
+            >
+              Apply Filter
+            </button>
+            <button
+              onClick={clearDateFilters}
+              className="bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-300"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+        {(startDate || endDate) && (
+          <div className="mt-2 text-xs text-blue-600">
+            {startDate && endDate 
+              ? `Showing reductions from ${startDate} to ${endDate}` 
+              : startDate 
+                ? `Showing reductions from ${startDate} onwards`
+                : `Showing reductions until ${endDate}`}
+          </div>
+        )}
       </div>
 
       {/* Stock Summary */}
