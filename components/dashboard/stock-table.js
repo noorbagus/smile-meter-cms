@@ -12,12 +12,16 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
   const [units, setUnits] = useState([]);
   const [currentUnitName, setCurrentUnitName] = useState('');
   const [totalStock, setTotalStock] = useState(0);
+  const [totalReduced, setTotalReduced] = useState(0); // New state for total reduced
   const productsPerPage = 5;
   const supabase = createClient();
 
   useEffect(() => {
     loadUnits();
     loadStockData();
+    if (selectedUnit) {
+      loadTotalReduced();
+    }
   }, [selectedUnit]);
 
   // Calculate total stock whenever unitStock changes
@@ -42,6 +46,31 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
       }
     } catch (error) {
       console.error('Error loading units:', error);
+    }
+  };
+
+  // New function to load total reduced
+  const loadTotalReduced = async () => {
+    if (!selectedUnit) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('stock_transactions')
+        .select('quantity_change')
+        .eq('unit_id', selectedUnit)
+        .eq('transaction_type', 'reduction');
+        
+      if (error) throw error;
+      
+      // Sum all the negative quantity changes (reductions)
+      const totalReduced = data?.reduce((sum, transaction) => {
+        return sum + Math.abs(transaction.quantity_change);
+      }, 0) || 0;
+      
+      setTotalReduced(totalReduced);
+    } catch (error) {
+      console.error('Error loading total reduced:', error);
+      setTotalReduced(0);
     }
   };
 
@@ -142,6 +171,11 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
 
       setUnitStock(prev => ({ ...prev, [productId]: newQuantity }));
       setEditingStock({ ...editingStock, [key]: false });
+      
+      // Update total reduced if this was a reduction
+      if (newQuantity < oldQuantity) {
+        loadTotalReduced();
+      }
     } catch (error) {
       console.error('Error updating stock:', error);
       alert('Failed to update stock: ' + error.message);
@@ -242,11 +276,17 @@ const StockTable = ({ selectedUnit, user, onUnitChange }) => {
       {/* Stock Summary */}
       <div className="bg-white p-4 rounded-lg shadow-sm border mb-4">
         <h3 className="text-lg font-semibold text-gray-900 mb-3">Stock Summary</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="bg-gray-50 p-3 rounded-lg">
             <span className="text-sm text-gray-500">Total Stock</span>
             <div className={`text-2xl font-bold ${getStockStatusColor(totalStock)}`}>
               {totalStock}
+            </div>
+          </div>
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <span className="text-sm text-gray-500">Total Reduced</span>
+            <div className="text-2xl font-bold text-blue-600">
+              {totalReduced}
             </div>
           </div>
           <div className="bg-gray-50 p-3 rounded-lg">
