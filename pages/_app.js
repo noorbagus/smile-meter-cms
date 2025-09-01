@@ -1,4 +1,4 @@
-// pages/_app.js - Updated with SSR approach
+// pages/_app.js - Updated with SSR approach..
 import { useState, useEffect, createContext, useContext } from 'react';
 import { useRouter } from 'next/router';
 import { createClient } from '../utils/supabase/client';
