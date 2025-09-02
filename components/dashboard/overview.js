@@ -1,6 +1,6 @@
 // components/dashboard/overview.js
 import React, { useState, useEffect } from 'react';
-import { Store, AlertTriangle, Package, Users, TrendingUp, TrendingDown, X, MinusCircle } from 'lucide-react';
+import { Store, AlertTriangle, Package, Users, TrendingUp, TrendingDown, X } from 'lucide-react';
 import { createClient } from '../../utils/supabase/client';
 
 const Overview = ({ onUnitSelect, onTabChange }) => {
@@ -13,7 +13,6 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [globalStats, setGlobalStats] = useState({
     totalStock: 0,
-    totalReduced: 0,
     criticalCount: 0,
     emptyCount: 0,
     mostActive: 'Loading...'
@@ -25,57 +24,24 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
     fetchOverviewData();
   }, []);
 
-  const getTotalReduced = async () => {
+  const getMostActiveUnit = async (unitsArray) => {
+    if (!unitsArray || unitsArray.length === 0) return 'No data';
+    
     try {
-      // Get reduction transactions from the last 30 days
+      // Get reduction data from last 30 days
       const thirtyDaysAgo = new Date(Date.now() - 30*24*60*60*1000).toISOString();
       
       const { data: reductions } = await supabase
         .from('stock_transactions')
-        .select('quantity_change')
-        .eq('transaction_type', 'reduction')
-        .gte('created_at', thirtyDaysAgo);
-
-      if (!reductions || reductions.length === 0) {
-        return 0;
-      }
-
-      // Sum all reduction quantities (these are negative values, so we use Math.abs)
-      const totalReduced = reductions.reduce((sum, transaction) => {
-        return sum + Math.abs(transaction.quantity_change);
-      }, 0);
-      
-      return totalReduced;
-    } catch (error) {
-      console.error('Error calculating total reduced:', error);
-      return 0;
-    }
-  };
-
-  const getMostActiveUnit = async () => {
-    if (units.length === 0) return 'No data'; // Check if units array is empty
-    
-    console.log("Units array:", units); // Debug units array
-    
-    try {
-      // Ambil data transaksi reduction 30 hari terakhir
-      const thirtyDaysAgo = new Date(Date.now() - 30*24*60*60*1000).toISOString();
-      console.log("Thirty days ago:", thirtyDaysAgo); // Debug date calculation
-      
-      const { data: reductions, error } = await supabase
-        .from('stock_transactions')
         .select('unit_id, quantity_change')
         .eq('transaction_type', 'reduction')
         .gte('created_at', thirtyDaysAgo);
-      
-      console.log("Reductions query result:", reductions, "Error:", error); // Debug query result
-      
+
       if (!reductions || reductions.length === 0) {
-        console.log("No reductions found");
         return 'No recent activity';
       }
-  
-      // Group by unit dan hitung total reduction
+
+      // Group by unit and calculate total reductions
       const unitReductions = {};
       
       reductions.forEach(reduction => {
@@ -83,46 +49,35 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
         if (!unitReductions[unitId]) {
           unitReductions[unitId] = 0;
         }
-        // quantity_change untuk reduction adalah negatif, jadi kita pakai Math.abs
+        // quantity_change for reductions is negative, so use Math.abs
         unitReductions[unitId] += Math.abs(reduction.quantity_change);
       });
-      
-      console.log("Unit reductions:", unitReductions); // Debug unit reductions
-      
-      // Cari unit dengan reduction terbanyak
+
+      // Find unit with most reductions
       let mostActiveUnitId = null;
       let maxReductions = 0;
       
       Object.entries(unitReductions).forEach(([unitId, totalReduced]) => {
-        console.log(`Unit ${unitId}: ${totalReduced}`); // Debug each unit's reduction
         if (totalReduced > maxReductions) {
           maxReductions = totalReduced;
           mostActiveUnitId = unitId;
         }
       });
-      
-      console.log("Most active unit ID:", mostActiveUnitId, "with", maxReductions, "reductions"); // Debug result
-      
-      // Cari nama unit
-      const mostActiveUnit = units.find(u => u.id === mostActiveUnitId);
-      console.log("Found unit:", mostActiveUnit); // Debug unit lookup
-      
+
+      // Find unit name
+      const mostActiveUnit = unitsArray.find(u => u.id === mostActiveUnitId);
       return mostActiveUnit ? mostActiveUnit.name : 'No active units';
       
     } catch (error) {
       console.error('Error calculating most active unit:', error);
       
-      // Fallback ke logic lama jika error
-      if (units.length > 0) {
-        const mostActiveByStock = units.reduce((most, unit) => 
-          unit.stats.totalStock > most.stats.totalStock ? unit : most, units[0]
-        );
-        console.log("Fallback to unit with most stock:", mostActiveByStock.name);
-        return mostActiveByStock.name;
-      }
-      return "No data";
+      // Fallback to unit with highest stock
+      return unitsArray.reduce((most, unit) => 
+        unit.stats.totalStock > most.stats.totalStock ? unit : most
+      ).name;
     }
   };
+
   const fetchOverviewData = async () => {
     try {
       // Fetch units with CS assignments
@@ -218,16 +173,12 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
 
       setUnits(sortedUnits);
       
-      // Calculate most active unit berdasarkan reduction
-      const mostActive = await getMostActiveUnit();
-      
-      // Get total reduced for all units in the last 30 days
-      const totalReduced = await getTotalReduced();
+      // Calculate most active unit AFTER units are processed
+      const mostActive = await getMostActiveUnit(enrichedUnits);
 
       // Calculate global stats
       const newGlobalStats = {
         totalStock: enrichedUnits.reduce((sum, unit) => sum + unit.stats.totalStock, 0),
-        totalReduced: totalReduced,
         criticalCount: allCriticalProducts.length,
         emptyCount: allEmptyProducts.length,
         mostActive
@@ -384,8 +335,8 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
         <div className="animate-pulse">
           <div className="h-8 bg-gray-200 rounded w-48 mb-2"></div>
           <div className="h-4 bg-gray-200 rounded w-64 mb-6"></div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-            {[...Array(5)].map((_, i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            {[...Array(4)].map((_, i) => (
               <div key={i} className="bg-white p-6 rounded-lg shadow-sm border h-24"></div>
             ))}
           </div>
@@ -408,7 +359,7 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
       </div>
 
       {/* Global Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-6 rounded-lg shadow-sm border">
           <div className="flex items-center justify-between">
             <div>
@@ -416,17 +367,6 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
               <p className="text-2xl font-bold text-gray-900">{globalStats.totalStock.toLocaleString()}</p>
             </div>
             <Package className="h-8 w-8 text-blue-600" />
-          </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-lg shadow-sm border">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Reduced</p>
-              <p className="text-2xl font-bold text-purple-600">{globalStats.totalReduced.toLocaleString()}</p>
-              <p className="text-xs text-gray-500 mt-1">Last 30 days</p>
-            </div>
-            <MinusCircle className="h-8 w-8 text-purple-600" />
           </div>
         </div>
         
