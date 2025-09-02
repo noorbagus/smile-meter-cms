@@ -1,6 +1,6 @@
 // components/dashboard/overview.js
 import React, { useState, useEffect } from 'react';
-import { Store, AlertTriangle, Package, Users, TrendingUp, TrendingDown, X } from 'lucide-react';
+import { Store, AlertTriangle, Package, Users, TrendingUp, TrendingDown, X, MinusCircle } from 'lucide-react';
 import { createClient } from '../../utils/supabase/client';
 
 const Overview = ({ onUnitSelect, onTabChange }) => {
@@ -13,6 +13,7 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [globalStats, setGlobalStats] = useState({
     totalStock: 0,
+    totalReduced: 0,
     criticalCount: 0,
     emptyCount: 0,
     mostActive: 'Loading...'
@@ -23,6 +24,33 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
   useEffect(() => {
     fetchOverviewData();
   }, []);
+
+  const getTotalReduced = async () => {
+    try {
+      // Get reduction transactions from the last 30 days
+      const thirtyDaysAgo = new Date(Date.now() - 30*24*60*60*1000).toISOString();
+      
+      const { data: reductions } = await supabase
+        .from('stock_transactions')
+        .select('quantity_change')
+        .eq('transaction_type', 'reduction')
+        .gte('created_at', thirtyDaysAgo);
+
+      if (!reductions || reductions.length === 0) {
+        return 0;
+      }
+
+      // Sum all reduction quantities (these are negative values, so we use Math.abs)
+      const totalReduced = reductions.reduce((sum, transaction) => {
+        return sum + Math.abs(transaction.quantity_change);
+      }, 0);
+      
+      return totalReduced;
+    } catch (error) {
+      console.error('Error calculating total reduced:', error);
+      return 0;
+    }
+  };
 
   const getMostActiveUnit = async () => {
     if (units.length === 0) return 'No data';
@@ -175,10 +203,14 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
       
       // Calculate most active unit berdasarkan reduction
       const mostActive = await getMostActiveUnit();
+      
+      // Get total reduced for all units in the last 30 days
+      const totalReduced = await getTotalReduced();
 
       // Calculate global stats
       const newGlobalStats = {
         totalStock: enrichedUnits.reduce((sum, unit) => sum + unit.stats.totalStock, 0),
+        totalReduced: totalReduced,
         criticalCount: allCriticalProducts.length,
         emptyCount: allEmptyProducts.length,
         mostActive
@@ -335,8 +367,8 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
         <div className="animate-pulse">
           <div className="h-8 bg-gray-200 rounded w-48 mb-2"></div>
           <div className="h-4 bg-gray-200 rounded w-64 mb-6"></div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {[...Array(4)].map((_, i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+            {[...Array(5)].map((_, i) => (
               <div key={i} className="bg-white p-6 rounded-lg shadow-sm border h-24"></div>
             ))}
           </div>
@@ -359,7 +391,7 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
       </div>
 
       {/* Global Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-white p-6 rounded-lg shadow-sm border">
           <div className="flex items-center justify-between">
             <div>
@@ -367,6 +399,17 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
               <p className="text-2xl font-bold text-gray-900">{globalStats.totalStock.toLocaleString()}</p>
             </div>
             <Package className="h-8 w-8 text-blue-600" />
+          </div>
+        </div>
+        
+        <div className="bg-white p-6 rounded-lg shadow-sm border">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Reduced</p>
+              <p className="text-2xl font-bold text-purple-600">{globalStats.totalReduced.toLocaleString()}</p>
+              <p className="text-xs text-gray-500 mt-1">Last 30 days</p>
+            </div>
+            <MinusCircle className="h-8 w-8 text-purple-600" />
           </div>
         </div>
         
