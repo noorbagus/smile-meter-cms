@@ -11,12 +11,72 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
   const [criticalProducts, setCriticalProducts] = useState([]);
   const [emptyProducts, setEmptyProducts] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [globalStats, setGlobalStats] = useState({
+    totalStock: 0,
+    criticalCount: 0,
+    emptyCount: 0,
+    mostActive: 'Loading...'
+  });
   const productsPerPage = 4;
   const supabase = createClient();
 
   useEffect(() => {
     fetchOverviewData();
   }, []);
+
+  const getMostActiveUnit = async () => {
+    if (units.length === 0) return 'No data';
+    
+    try {
+      // Ambil data transaksi reduction 30 hari terakhir
+      const thirtyDaysAgo = new Date(Date.now() - 30*24*60*60*1000).toISOString();
+      
+      const { data: reductions } = await supabase
+        .from('stock_transactions')
+        .select('unit_id, quantity_change')
+        .eq('transaction_type', 'reduction')
+        .gte('created_at', thirtyDaysAgo);
+
+      if (!reductions || reductions.length === 0) {
+        return 'No recent activity';
+      }
+
+      // Group by unit dan hitung total reduction
+      const unitReductions = {};
+      
+      reductions.forEach(reduction => {
+        const unitId = reduction.unit_id;
+        if (!unitReductions[unitId]) {
+          unitReductions[unitId] = 0;
+        }
+        // quantity_change untuk reduction adalah negatif, jadi kita pakai Math.abs
+        unitReductions[unitId] += Math.abs(reduction.quantity_change);
+      });
+
+      // Cari unit dengan reduction terbanyak
+      let mostActiveUnitId = null;
+      let maxReductions = 0;
+      
+      Object.entries(unitReductions).forEach(([unitId, totalReduced]) => {
+        if (totalReduced > maxReductions) {
+          maxReductions = totalReduced;
+          mostActiveUnitId = unitId;
+        }
+      });
+
+      // Cari nama unit
+      const mostActiveUnit = units.find(u => u.id === mostActiveUnitId);
+      return mostActiveUnit ? mostActiveUnit.name : 'No active units';
+      
+    } catch (error) {
+      console.error('Error calculating most active unit:', error);
+      
+      // Fallback ke logic lama jika error
+      return units.reduce((most, unit) => 
+        unit.stats.totalStock > most.stats.totalStock ? unit : most
+      ).name;
+    }
+  };
 
   const fetchOverviewData = async () => {
     try {
@@ -112,6 +172,20 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
       });
 
       setUnits(sortedUnits);
+      
+      // Calculate most active unit berdasarkan reduction
+      const mostActive = await getMostActiveUnit();
+
+      // Calculate global stats
+      const newGlobalStats = {
+        totalStock: enrichedUnits.reduce((sum, unit) => sum + unit.stats.totalStock, 0),
+        criticalCount: allCriticalProducts.length,
+        emptyCount: allEmptyProducts.length,
+        mostActive
+      };
+
+      setGlobalStats(newGlobalStats);
+      
     } catch (error) {
       console.error('Error fetching overview data:', error);
     } finally {
@@ -169,21 +243,6 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
                   priority === 'critical' ? 'text-yellow-600' : 'text-orange-600';
     
     return <AlertTriangle size={16} className={color} />;
-  };
-
-  const getMostActiveUnit = () => {
-    if (units.length === 0) return 'No data';
-    return units.reduce((most, unit) => 
-      unit.stats.totalStock > most.stats.totalStock ? unit : most
-    ).name;
-  };
-
-  // Calculate global stats
-  const globalStats = {
-    totalStock: units.reduce((sum, unit) => sum + unit.stats.totalStock, 0),
-    criticalCount: criticalProducts.length,
-    emptyCount: emptyProducts.length,
-    mostActive: getMostActiveUnit()
   };
 
   const ProductModal = ({ isOpen, onClose, title, products, type }) => {
@@ -344,6 +403,7 @@ const Overview = ({ onUnitSelect, onTabChange }) => {
             <div>
               <p className="text-sm font-medium text-gray-600">Most Active Unit</p>
               <p className="text-lg font-bold text-green-600 truncate">{globalStats.mostActive}</p>
+              <p className="text-xs text-gray-500 mt-1">Most prizes given (30 days)</p>
             </div>
             <TrendingUp className="h-8 w-8 text-green-600" />
           </div>
